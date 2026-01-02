@@ -22,18 +22,21 @@ const (
 )
 
 type Game struct {
-	State          RunState
-	Player         *gameobjects.Player
-	Enemies        []*gameobjects.Enemy
-	Boss           *gameobjects.Boss
-	Dungeon        *world.Dungeon
-	Camera         *systems.Camera
-	Projectiles    []*Projectile
-	CurrentRoom    *world.Room
-	SelectedClass  gamedata.ClassType
-	LevelUpMenu    bool
-	RewardOptions  []*gamedata.Item
-	SelectedReward int
+	State               RunState
+	Player              *gameobjects.Player
+	Enemies             []*gameobjects.Enemy
+	Boss                *gameobjects.Boss
+	Dungeon             *world.Dungeon
+	Camera              *systems.Camera
+	Projectiles         []*Projectile
+	CurrentRoom         *world.Room
+	SelectedClass       gamedata.ClassType
+	LevelUpMenu         bool
+	RewardOptions       []*gamedata.Item
+	SelectedReward      int
+	PlayerMoveTargetX   float32
+	PlayerMoveTargetY   float32
+	HasPlayerMoveTarget bool
 }
 
 type Projectile struct {
@@ -49,18 +52,21 @@ type Projectile struct {
 
 func NewGame() *Game {
 	return &Game{
-		State:          RunStateMenu,
-		Player:         nil,
-		Enemies:        []*gameobjects.Enemy{},
-		Boss:           nil,
-		Dungeon:        nil,
-		Camera:         systems.NewCamera(),
-		Projectiles:    []*Projectile{},
-		CurrentRoom:    nil,
-		SelectedClass:  gamedata.ClassTypeMelee,
-		LevelUpMenu:    false,
-		RewardOptions:  []*gamedata.Item{},
-		SelectedReward: 0,
+		State:               RunStateMenu,
+		Player:              nil,
+		Enemies:             []*gameobjects.Enemy{},
+		Boss:                nil,
+		Dungeon:             nil,
+		Camera:              systems.NewCamera(),
+		Projectiles:         []*Projectile{},
+		CurrentRoom:         nil,
+		SelectedClass:       gamedata.ClassTypeMelee,
+		LevelUpMenu:         false,
+		RewardOptions:       []*gamedata.Item{},
+		SelectedReward:      0,
+		PlayerMoveTargetX:   0,
+		PlayerMoveTargetY:   0,
+		HasPlayerMoveTarget: false,
 	}
 }
 
@@ -162,6 +168,27 @@ func (g *Game) AdvanceToNextRoom() {
 	g.Projectiles = []*Projectile{}
 }
 
+func (g *Game) GenerateNewDungeon() {
+	g.Dungeon = world.NewDungeon()
+	g.Dungeon.CurrentRoom = 0
+	g.CurrentRoom = g.Dungeon.GetCurrentRoom()
+
+	startX := g.CurrentRoom.X + g.CurrentRoom.Width/2
+	startY := g.CurrentRoom.Y + g.CurrentRoom.Height/2
+	g.Player.X = startX
+	g.Player.Y = startY
+	g.Player.Health = g.Player.MaxHealth
+
+	g.SpawnRoomEnemies()
+	g.Projectiles = []*Projectile{}
+	g.HasPlayerMoveTarget = false
+	g.State = RunStateInGame
+}
+
+func (g *Game) IsMenuOpen() bool {
+	return g.LevelUpMenu || g.State == RunStateRewardSelection
+}
+
 func (g *Game) Update(deltaTime float32) {
 	if g.State != RunStateInGame {
 		return
@@ -171,7 +198,9 @@ func (g *Game) Update(deltaTime float32) {
 		return
 	}
 
-	input := systems.UpdateInput()
+	input := systems.UpdateInput(g.Camera)
+
+	isMenuOpen := g.IsMenuOpen()
 
 	if input.Skill1 && len(g.Player.Skills) > 0 && g.Player.Skills[0].CanUse() {
 		skill := g.Player.Skills[0]
@@ -232,17 +261,31 @@ func (g *Game) Update(deltaTime float32) {
 		}
 	}
 
-	if input.MoveUp {
-		g.Player.Y -= g.Player.MoveSpeed * deltaTime
-	}
-	if input.MoveDown {
-		g.Player.Y += g.Player.MoveSpeed * deltaTime
-	}
-	if input.MoveLeft {
-		g.Player.X -= g.Player.MoveSpeed * deltaTime
-	}
-	if input.MoveRight {
-		g.Player.X += g.Player.MoveSpeed * deltaTime
+	if !isMenuOpen {
+		if input.HasMoveTarget {
+			g.PlayerMoveTargetX = input.MoveToX
+			g.PlayerMoveTargetY = input.MoveToY
+			g.HasPlayerMoveTarget = true
+		}
+
+		if g.HasPlayerMoveTarget {
+			playerCenterX := g.Player.X + g.Player.Width/2
+			playerCenterY := g.Player.Y + g.Player.Height/2
+			dx := g.PlayerMoveTargetX - playerCenterX
+			dy := g.PlayerMoveTargetY - playerCenterY
+			distance := systems.GetDistance(0, 0, dx, dy)
+
+			if distance > 5 {
+				moveDistance := g.Player.MoveSpeed * deltaTime
+				if moveDistance > distance {
+					moveDistance = distance
+				}
+				g.Player.X += (dx / distance) * moveDistance
+				g.Player.Y += (dy / distance) * moveDistance
+			} else {
+				g.HasPlayerMoveTarget = false
+			}
+		}
 	}
 
 	if g.CurrentRoom != nil {
@@ -348,45 +391,158 @@ func (g *Game) Update(deltaTime float32) {
 		}
 	}
 
-	g.Player.Update(deltaTime)
+	if !isMenuOpen {
+		g.Player.Update(deltaTime)
 
-	for _, enemy := range g.Enemies {
-		enemy.Update(deltaTime, g.Player.X+g.Player.Width/2, g.Player.Y+g.Player.Height/2)
-		enemy.Attack(g.Player)
-	}
-
-	if g.Boss != nil {
-		g.Boss.Update(deltaTime, g.Player.X+g.Player.Width/2, g.Player.Y+g.Player.Height/2)
-		g.Boss.Attack(g.Player)
-
-		if g.Boss.ShouldSpawnAdds() {
-			for i := 0; i < 2; i++ {
-				angle := float32(i) * 3.14159 * 2.0 / 2.0
-				addX := g.Boss.X + g.Boss.Width/2 + float32(math.Cos(float64(angle)))*100
-				addY := g.Boss.Y + g.Boss.Height/2 + float32(math.Sin(float64(angle)))*100
-				add := gameobjects.NewEnemy(addX, addY, false)
-				g.Enemies = append(g.Enemies, add)
-			}
-			g.Boss.ResetAddSpawnTimer()
+		for _, enemy := range g.Enemies {
+			enemy.Update(deltaTime, g.Player.X+g.Player.Width/2, g.Player.Y+g.Player.Height/2)
+			enemy.Attack(g.Player)
 		}
 
-		for i := len(g.Boss.Projectiles) - 1; i >= 0; i-- {
-			proj := g.Boss.Projectiles[i]
+		if g.Boss != nil {
+			g.Boss.Update(deltaTime, g.Player.X+g.Player.Width/2, g.Player.Y+g.Player.Height/2)
+			g.Boss.Attack(g.Player)
+
+			if g.Boss.ShouldSpawnAdds() {
+				for i := 0; i < 2; i++ {
+					angle := float32(i) * 3.14159 * 2.0 / 2.0
+					addX := g.Boss.X + g.Boss.Width/2 + float32(math.Cos(float64(angle)))*100
+					addY := g.Boss.Y + g.Boss.Height/2 + float32(math.Sin(float64(angle)))*100
+					add := gameobjects.NewEnemy(addX, addY, false)
+					g.Enemies = append(g.Enemies, add)
+				}
+				g.Boss.ResetAddSpawnTimer()
+			}
+
+			for i := len(g.Boss.Projectiles) - 1; i >= 0; i-- {
+				proj := g.Boss.Projectiles[i]
+				if !proj.Alive {
+					g.Boss.Projectiles = append(g.Boss.Projectiles[:i], g.Boss.Projectiles[i+1:]...)
+					continue
+				}
+
+				if !isMenuOpen {
+					proj.X += proj.VX * deltaTime
+					proj.Y += proj.VY * deltaTime
+				}
+
+				playerCenterX := g.Player.X + g.Player.Width/2
+				playerCenterY := g.Player.Y + g.Player.Height/2
+				distance := systems.GetDistance(proj.X, proj.Y, playerCenterX, playerCenterY)
+
+				if distance <= proj.Radius+g.Player.Width/2 {
+					g.Player.TakeDamage(proj.Damage)
+					proj.Alive = false
+				}
+
+				if g.CurrentRoom != nil {
+					if proj.X < g.CurrentRoom.X || proj.X > g.CurrentRoom.X+g.CurrentRoom.Width ||
+						proj.Y < g.CurrentRoom.Y || proj.Y > g.CurrentRoom.Y+g.CurrentRoom.Height {
+						proj.Alive = false
+					}
+				}
+			}
+
+			for _, proj := range g.Projectiles {
+				if !proj.Alive {
+					continue
+				}
+
+				bossCenterX := g.Boss.X + g.Boss.Width/2
+				bossCenterY := g.Boss.Y + g.Boss.Height/2
+				distance := systems.GetDistance(proj.X, proj.Y, bossCenterX, bossCenterY)
+
+				if distance <= proj.Radius+g.Boss.Width/2 {
+					wasAlive := g.Boss.Alive
+					g.Boss.TakeDamage(proj.Damage)
+					proj.Alive = false
+
+					if wasAlive && !g.Boss.Alive {
+						g.Player.GainXP(100)
+						if g.Player.Class.Type == gamedata.ClassTypeRanged {
+							g.Player.Heal(g.Player.Class.KillHealAmount * 5)
+						}
+					}
+					break
+				}
+			}
+
+			if input.Attack {
+				mouseX, mouseY := systems.GetMousePosition()
+				worldX, worldY := systems.ScreenToWorld(mouseX, mouseY, g.Camera)
+
+				if worldX >= g.Boss.X && worldX <= g.Boss.X+g.Boss.Width &&
+					worldY >= g.Boss.Y && worldY <= g.Boss.Y+g.Boss.Height {
+
+					playerCenterX := g.Player.X + g.Player.Width/2
+					playerCenterY := g.Player.Y + g.Player.Height/2
+					bossCenterX := g.Boss.X + g.Boss.Width/2
+					bossCenterY := g.Boss.Y + g.Boss.Height/2
+
+					distance := systems.GetDistance(playerCenterX, playerCenterY, bossCenterX, bossCenterY)
+
+					switch g.Player.Class.Type {
+					case gamedata.ClassTypeMelee:
+						if distance <= g.Player.AttackRange {
+							wasAlive := g.Boss.Alive
+							damage := g.Player.AttackDamage
+							g.Boss.TakeDamage(damage)
+							lifesteal := int(float32(damage) * g.Player.Class.LifestealPercent)
+							g.Player.Heal(lifesteal)
+
+							if wasAlive && !g.Boss.Alive {
+								g.Player.GainXP(100)
+							}
+						}
+					case gamedata.ClassTypeCaster:
+						if distance <= g.Player.AttackRange && g.Player.CanUseMana(g.Player.Class.ManaCost) {
+							wasAlive := g.Boss.Alive
+							g.Boss.TakeDamage(g.Player.AttackDamage)
+							g.Player.UseMana(g.Player.Class.ManaCost)
+
+							if wasAlive && !g.Boss.Alive {
+								g.Player.GainXP(100)
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+
+	if !isMenuOpen {
+		for i := len(g.Projectiles) - 1; i >= 0; i-- {
+			proj := g.Projectiles[i]
 			if !proj.Alive {
-				g.Boss.Projectiles = append(g.Boss.Projectiles[:i], g.Boss.Projectiles[i+1:]...)
+				g.Projectiles = append(g.Projectiles[:i], g.Projectiles[i+1:]...)
 				continue
 			}
 
 			proj.X += proj.VX * deltaTime
 			proj.Y += proj.VY * deltaTime
 
-			playerCenterX := g.Player.X + g.Player.Width/2
-			playerCenterY := g.Player.Y + g.Player.Height/2
-			distance := systems.GetDistance(proj.X, proj.Y, playerCenterX, playerCenterY)
+			for _, enemy := range g.Enemies {
+				if !enemy.Alive {
+					continue
+				}
 
-			if distance <= proj.Radius+g.Player.Width/2 {
-				g.Player.TakeDamage(proj.Damage)
-				proj.Alive = false
+				enemyCenterX := enemy.X + enemy.Width/2
+				enemyCenterY := enemy.Y + enemy.Height/2
+				distance := systems.GetDistance(proj.X, proj.Y, enemyCenterX, enemyCenterY)
+
+				if distance <= proj.Radius+enemy.Width/2 {
+					wasAlive := enemy.Alive
+					enemy.TakeDamage(proj.Damage)
+					proj.Alive = false
+
+					if wasAlive && !enemy.Alive {
+						g.Player.GainXP(20)
+						if g.Player.Class.Type == gamedata.ClassTypeRanged {
+							g.Player.Heal(g.Player.Class.KillHealAmount)
+						}
+					}
+					break
+				}
 			}
 
 			if g.CurrentRoom != nil {
@@ -394,113 +550,6 @@ func (g *Game) Update(deltaTime float32) {
 					proj.Y < g.CurrentRoom.Y || proj.Y > g.CurrentRoom.Y+g.CurrentRoom.Height {
 					proj.Alive = false
 				}
-			}
-		}
-
-		for _, proj := range g.Projectiles {
-			if !proj.Alive {
-				continue
-			}
-
-			bossCenterX := g.Boss.X + g.Boss.Width/2
-			bossCenterY := g.Boss.Y + g.Boss.Height/2
-			distance := systems.GetDistance(proj.X, proj.Y, bossCenterX, bossCenterY)
-
-			if distance <= proj.Radius+g.Boss.Width/2 {
-				wasAlive := g.Boss.Alive
-				g.Boss.TakeDamage(proj.Damage)
-				proj.Alive = false
-
-				if wasAlive && !g.Boss.Alive {
-					g.Player.GainXP(100)
-					if g.Player.Class.Type == gamedata.ClassTypeRanged {
-						g.Player.Heal(g.Player.Class.KillHealAmount * 5)
-					}
-				}
-				break
-			}
-		}
-
-		if input.Attack {
-			mouseX, mouseY := systems.GetMousePosition()
-			worldX, worldY := systems.ScreenToWorld(mouseX, mouseY, g.Camera)
-
-			if worldX >= g.Boss.X && worldX <= g.Boss.X+g.Boss.Width &&
-				worldY >= g.Boss.Y && worldY <= g.Boss.Y+g.Boss.Height {
-
-				playerCenterX := g.Player.X + g.Player.Width/2
-				playerCenterY := g.Player.Y + g.Player.Height/2
-				bossCenterX := g.Boss.X + g.Boss.Width/2
-				bossCenterY := g.Boss.Y + g.Boss.Height/2
-
-				distance := systems.GetDistance(playerCenterX, playerCenterY, bossCenterX, bossCenterY)
-
-				switch g.Player.Class.Type {
-				case gamedata.ClassTypeMelee:
-					if distance <= g.Player.AttackRange {
-						wasAlive := g.Boss.Alive
-						damage := g.Player.AttackDamage
-						g.Boss.TakeDamage(damage)
-						lifesteal := int(float32(damage) * g.Player.Class.LifestealPercent)
-						g.Player.Heal(lifesteal)
-
-						if wasAlive && !g.Boss.Alive {
-							g.Player.GainXP(100)
-						}
-					}
-				case gamedata.ClassTypeCaster:
-					if distance <= g.Player.AttackRange && g.Player.CanUseMana(g.Player.Class.ManaCost) {
-						wasAlive := g.Boss.Alive
-						g.Boss.TakeDamage(g.Player.AttackDamage)
-						g.Player.UseMana(g.Player.Class.ManaCost)
-
-						if wasAlive && !g.Boss.Alive {
-							g.Player.GainXP(100)
-						}
-					}
-				}
-			}
-		}
-	}
-
-	for i := len(g.Projectiles) - 1; i >= 0; i-- {
-		proj := g.Projectiles[i]
-		if !proj.Alive {
-			g.Projectiles = append(g.Projectiles[:i], g.Projectiles[i+1:]...)
-			continue
-		}
-
-		proj.X += proj.VX * deltaTime
-		proj.Y += proj.VY * deltaTime
-
-		for _, enemy := range g.Enemies {
-			if !enemy.Alive {
-				continue
-			}
-
-			enemyCenterX := enemy.X + enemy.Width/2
-			enemyCenterY := enemy.Y + enemy.Height/2
-			distance := systems.GetDistance(proj.X, proj.Y, enemyCenterX, enemyCenterY)
-
-			if distance <= proj.Radius+enemy.Width/2 {
-				wasAlive := enemy.Alive
-				enemy.TakeDamage(proj.Damage)
-				proj.Alive = false
-
-				if wasAlive && !enemy.Alive {
-					g.Player.GainXP(20)
-					if g.Player.Class.Type == gamedata.ClassTypeRanged {
-						g.Player.Heal(g.Player.Class.KillHealAmount)
-					}
-				}
-				break
-			}
-		}
-
-		if g.CurrentRoom != nil {
-			if proj.X < g.CurrentRoom.X || proj.X > g.CurrentRoom.X+g.CurrentRoom.Width ||
-				proj.Y < g.CurrentRoom.Y || proj.Y > g.CurrentRoom.Y+g.CurrentRoom.Height {
-				proj.Alive = false
 			}
 		}
 	}
@@ -539,7 +588,11 @@ func (g *Game) Update(deltaTime float32) {
 	}
 
 	if g.CheckRoomCompletion() {
-		g.AdvanceToNextRoom()
+		if g.CurrentRoom.IsBoss() {
+			g.EndRun(true)
+		} else {
+			g.AdvanceToNextRoom()
+		}
 	}
 
 	worldWidth, worldHeight := g.Dungeon.GetWorldBounds()
@@ -710,7 +763,6 @@ func (g *Game) HandleRewardSelectionInput() {
 				g.Player.EquipItem(item)
 			}
 		}
-		g.State = RunStateMenu
-		g.ResetState()
+		g.GenerateNewDungeon()
 	}
 }

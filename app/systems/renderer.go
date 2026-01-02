@@ -24,8 +24,8 @@ type Camera struct {
 }
 
 const (
-	CameraWidth  = 1024
-	CameraHeight = 768
+	CameraWidth  = 1600
+	CameraHeight = 900
 )
 
 func NewCamera() *Camera {

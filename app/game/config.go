@@ -12,8 +12,8 @@ const (
 )
 
 const (
-	WindowWidth  = 1024
-	WindowHeight = 768
+	WindowWidth  = 1600
+	WindowHeight = 900
 	TargetFPS    = 60
 )
 
