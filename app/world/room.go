@@ -3,10 +3,10 @@ package world
 import "math/rand"
 
 const (
-	RoomMinWidth      = 400
-	RoomMaxWidth      = 600
-	RoomMinHeight     = 300
-	RoomMaxHeight     = 450
+	RoomMinWidth      = 800
+	RoomMaxWidth      = 1200
+	RoomMinHeight     = 600
+	RoomMaxHeight     = 900
 	BossRoomWidth     = 800
 	BossRoomHeight    = 600
 	EnemiesPerRoomMin = 3

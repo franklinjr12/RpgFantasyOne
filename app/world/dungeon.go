@@ -17,7 +17,7 @@ func NewDungeon() *Dungeon {
 
 	x := float32(0)
 	y := float32(0)
-	roomSpacing := float32(700)
+	roomSpacing := float32(RoomMaxWidth + 200)
 
 	for i := 0; i < DungeonLength; i++ {
 		room := NewRoom(x, y, RoomTypeNormal)
