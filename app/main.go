@@ -2,6 +2,7 @@ package main
 
 import (
 	"singlefantasy/app/game"
+	"singlefantasy/app/systems"
 
 	rl "github.com/gen2brain/raylib-go/raylib"
 )
@@ -11,6 +12,8 @@ func main() {
 	defer rl.CloseWindow()
 
 	rl.SetTargetFPS(game.TargetFPS)
+
+	systems.LoadSpriteSheet()
 
 	g := game.NewGame()
 

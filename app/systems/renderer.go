@@ -2,10 +2,18 @@ package systems
 
 import (
 	"math"
+	"sync"
 
 	"singlefantasy/app/gameobjects"
 
 	rl "github.com/gen2brain/raylib-go/raylib"
+)
+
+var (
+	spriteSheet     rl.Texture2D
+	spriteSheetOnce sync.Once
+	spriteWidth     = float32(72)
+	spriteHeight    = float32(72)
 )
 
 var TerrainColorNormalRGBA = rl.NewColor(128, 128, 128, 255)
@@ -85,12 +93,26 @@ func UpdateCamera(camera *Camera, playerX, playerY, worldWidth, worldHeight floa
 func DrawPlayer(player *gameobjects.Player, camera *Camera) {
 	screenX, screenY := WorldToScreen(player.X, player.Y, camera)
 
-	color := PlayerColorRGBA
-	if player.HitFlashTimer > 0 {
-		color = rl.Red
+	var sourceRect rl.Rectangle
+	switch player.Class.Type {
+	case 0: // ClassTypeMelee
+		sourceRect = getSpriteSourceRect(1, 2) // row 2, column 3 (0-indexed: row 1, col 2)
+	case 1: // ClassTypeRanged
+		sourceRect = getSpriteSourceRect(0, 2) // row 1, column 3 (0-indexed: row 0, col 2)
+	case 2: // ClassTypeCaster
+		sourceRect = getSpriteSourceRect(0, 0) // row 1, column 1 (0-indexed: row 0, col 0)
+	default:
+		sourceRect = getSpriteSourceRect(0, 0)
 	}
 
-	rl.DrawRectangleRec(rl.NewRectangle(screenX, screenY, player.Width, player.Height), color)
+	destRect := rl.NewRectangle(screenX, screenY, player.Width, player.Height)
+
+	tint := rl.White
+	if player.HitFlashTimer > 0 {
+		tint = rl.Red
+	}
+
+	rl.DrawTexturePro(GetSpriteSheet(), sourceRect, destRect, rl.NewVector2(0, 0), 0, tint)
 
 	healthBarWidth := player.Width
 	healthBarHeight := float32(5)
@@ -115,20 +137,19 @@ func DrawEnemy(enemy *gameobjects.Enemy, camera *Camera) {
 
 	screenX, screenY := WorldToScreen(enemy.X, enemy.Y, camera)
 
-	var color rl.Color
-	if enemy.IsElite {
-		color = EliteColorRGBA
-	} else {
-		color = EnemyColorRGBA
-	}
+	sourceRect := getSpriteSourceRect(2, 4) // row 3, column 5 (0-indexed: row 2, col 4)
+	destRect := rl.NewRectangle(screenX, screenY, enemy.Width, enemy.Height)
 
+	tint := rl.White
 	if enemy.HitFlashTimer > 0 {
-		color = rl.Orange
+		tint = rl.Orange
 	} else if enemy.AttackFlashTimer > 0 {
-		color = rl.Yellow
+		tint = rl.Yellow
+	} else if enemy.IsElite {
+		tint = rl.NewColor(255, 200, 0, 255)
 	}
 
-	rl.DrawRectangleRec(rl.NewRectangle(screenX, screenY, enemy.Width, enemy.Height), color)
+	rl.DrawTexturePro(GetSpriteSheet(), sourceRect, destRect, rl.NewVector2(0, 0), 0, tint)
 
 	healthBarWidth := enemy.Width
 	healthBarHeight := float32(5)
@@ -172,18 +193,21 @@ func DrawBoss(boss *gameobjects.Boss, camera *Camera) {
 
 	screenX, screenY := WorldToScreen(boss.X, boss.Y, camera)
 
-	color := BossColorRGBA
+	sourceRect := getSpriteSourceRect(2, 4) // row 3, column 5 (0-indexed: row 2, col 4)
+	destRect := rl.NewRectangle(screenX, screenY, boss.Width, boss.Height)
+
+	tint := rl.NewColor(136, 0, 255, 255)
 	if boss.HitFlashTimer > 0 {
-		color = rl.Orange
+		tint = rl.Orange
 	} else if boss.AttackFlashTimer > 0 {
-		color = rl.Yellow
+		tint = rl.Yellow
 	}
 
 	if boss.TelegraphTimer > 0 {
 		rl.DrawCircleLines(int32(screenX+boss.Width/2), int32(screenY+boss.Height/2), 100, rl.Red)
 	}
 
-	rl.DrawRectangleRec(rl.NewRectangle(screenX, screenY, boss.Width, boss.Height), color)
+	rl.DrawTexturePro(GetSpriteSheet(), sourceRect, destRect, rl.NewVector2(0, 0), 0, tint)
 
 	healthBarWidth := boss.Width
 	healthBarHeight := float32(8)
@@ -210,4 +234,21 @@ func GetDistance(x1, y1, x2, y2 float32) float32 {
 	dx := x2 - x1
 	dy := y2 - y1
 	return float32(math.Sqrt(float64(dx*dx + dy*dy)))
+}
+
+func LoadSpriteSheet() {
+	spriteSheetOnce.Do(func() {
+		spriteSheet = rl.LoadTexture("resources/sprites/Basic Humanoid Sprites 4x.png")
+	})
+}
+
+func GetSpriteSheet() rl.Texture2D {
+	LoadSpriteSheet()
+	return spriteSheet
+}
+
+func getSpriteSourceRect(row, col int) rl.Rectangle {
+	x := float32(col) * spriteWidth
+	y := float32(row) * spriteHeight
+	return rl.NewRectangle(x, y, spriteWidth, spriteHeight)
 }
