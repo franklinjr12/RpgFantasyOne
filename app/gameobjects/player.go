@@ -25,6 +25,7 @@ type Player struct {
 	ManaShieldActive bool
 	ManaShieldAmount int
 	Equipment        map[gamedata.ItemSlot]*gamedata.Item
+	Effects          []gamedata.EffectInstance
 }
 
 func NewPlayer(x, y float32, classType gamedata.ClassType) *Player {
@@ -108,6 +109,8 @@ func (p *Player) Update(deltaTime float32) {
 		skill.Update(deltaTime)
 	}
 
+	gamedata.UpdateEffects(&p.Effects, deltaTime, p.TakeDamage)
+
 	if p.Mana < p.MaxMana {
 		p.Mana += int(deltaTime * 5)
 		if p.Mana > p.MaxMana {
@@ -117,6 +120,11 @@ func (p *Player) Update(deltaTime float32) {
 }
 
 func (p *Player) TakeDamage(damage int) {
+	if gamedata.HasEffect(&p.Effects, gamedata.EffectDamageReduction) {
+		magnitude := gamedata.GetEffectMagnitude(&p.Effects, gamedata.EffectDamageReduction)
+		damage = int(float32(damage) * (1.0 - magnitude))
+	}
+
 	if p.ManaShieldActive && p.ManaShieldAmount > 0 {
 		if damage <= p.ManaShieldAmount {
 			p.ManaShieldAmount -= damage

@@ -1,6 +1,9 @@
 package gameobjects
 
-import "math"
+import (
+	"math"
+	"singlefantasy/app/gamedata"
+)
 
 type EnemyState int
 
@@ -29,6 +32,7 @@ type Enemy struct {
 	State            EnemyState
 	Alive            bool
 	IsElite          bool
+	Effects          []gamedata.EffectInstance
 }
 
 func NewEnemy(x, y float32, isElite bool) *Enemy {
@@ -89,6 +93,8 @@ func (e *Enemy) Update(deltaTime float32, playerX, playerY float32) {
 			e.AttackFlashTimer = 0
 		}
 	}
+
+	gamedata.UpdateEffects(&e.Effects, deltaTime, e.TakeDamage)
 
 	playerCenterX := playerX
 	playerCenterY := playerY

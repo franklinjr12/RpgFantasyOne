@@ -48,6 +48,8 @@ type Projectile struct {
 	Damage int
 	Radius float32
 	Alive  bool
+	Skill  *gamedata.Skill
+	Caster *gameobjects.Player
 }
 
 func NewGame() *Game {
@@ -202,61 +204,12 @@ func (g *Game) Update(deltaTime float32) {
 
 	isMenuOpen := g.IsMenuOpen()
 
-	if input.Skill1 && len(g.Player.Skills) > 0 && g.Player.Skills[0].CanUse() {
-		skill := g.Player.Skills[0]
-		switch skill.Type {
-		case gamedata.SkillTypeDash:
-			mouseX, mouseY := systems.GetMousePosition()
-			worldX, worldY := systems.ScreenToWorld(mouseX, mouseY, g.Camera)
-			playerCenterX := g.Player.X + g.Player.Width/2
-			playerCenterY := g.Player.Y + g.Player.Height/2
-			dx := worldX - playerCenterX
-			dy := worldY - playerCenterY
-			distance := systems.GetDistance(0, 0, dx, dy)
-			if distance > 0 {
-				dashDistance := float32(100)
-				g.Player.X += (dx / distance) * dashDistance
-				g.Player.Y += (dy / distance) * dashDistance
-			}
-			skill.Use()
-		case gamedata.SkillTypeMultiShot:
-			if g.Player.Class.Type == gamedata.ClassTypeRanged {
-				mouseX, mouseY := systems.GetMousePosition()
-				worldX, worldY := systems.ScreenToWorld(mouseX, mouseY, g.Camera)
-				playerCenterX := g.Player.X + g.Player.Width/2
-				playerCenterY := g.Player.Y + g.Player.Height/2
-				dx := worldX - playerCenterX
-				dy := worldY - playerCenterY
-				distance := systems.GetDistance(0, 0, dx, dy)
-				if distance > 0 {
-					speed := float32(400)
-					angles := []float32{-0.3, 0, 0.3}
-					for _, angle := range angles {
-						cos := float32(1.0)
-						sin := angle
-						projDx := (dx*cos - dy*sin) / distance
-						projDy := (dx*sin + dy*cos) / distance
-						proj := &Projectile{
-							X:      playerCenterX,
-							Y:      playerCenterY,
-							VX:     projDx * speed,
-							VY:     projDy * speed,
-							Speed:  speed,
-							Damage: g.Player.AttackDamage,
-							Radius: 5,
-							Alive:  true,
-						}
-						g.Projectiles = append(g.Projectiles, proj)
-					}
-				}
-			}
-			skill.Use()
-		case gamedata.SkillTypeManaShield:
-			if g.Player.CanUseMana(skill.ManaCost) {
-				g.Player.UseMana(skill.ManaCost)
-				g.Player.ManaShieldActive = true
-				g.Player.ManaShieldAmount = g.Player.Mana / 2
-				skill.Use()
+	skillInputs := []bool{input.Skill1, input.Skill2, input.Skill3, input.Skill4}
+	for i, skillPressed := range skillInputs {
+		if skillPressed && i < len(g.Player.Skills) {
+			skill := g.Player.Skills[i]
+			if systems.CanCast(g.Player, skill) {
+				g.TryCastSkill(skill, input)
 			}
 		}
 	}
@@ -276,7 +229,8 @@ func (g *Game) Update(deltaTime float32) {
 			distance := systems.GetDistance(0, 0, dx, dy)
 
 			if distance > 5 {
-				moveDistance := g.Player.MoveSpeed * deltaTime
+				moveSpeed := g.GetPlayerMoveSpeed()
+				moveDistance := moveSpeed * deltaTime
 				if moveDistance > distance {
 					moveDistance = distance
 				}
@@ -454,7 +408,11 @@ func (g *Game) Update(deltaTime float32) {
 
 				if distance <= proj.Radius+g.Boss.Width/2 {
 					wasAlive := g.Boss.Alive
-					g.Boss.TakeDamage(proj.Damage)
+					if proj.Skill != nil && proj.Caster != nil {
+						systems.ApplySkill(proj.Caster, proj.Skill, []interface{}{g.Boss})
+					} else {
+						g.Boss.TakeDamage(proj.Damage)
+					}
 					proj.Alive = false
 
 					if wasAlive && !g.Boss.Alive {
@@ -532,7 +490,11 @@ func (g *Game) Update(deltaTime float32) {
 
 				if distance <= proj.Radius+enemy.Width/2 {
 					wasAlive := enemy.Alive
-					enemy.TakeDamage(proj.Damage)
+					if proj.Skill != nil && proj.Caster != nil {
+						systems.ApplySkill(proj.Caster, proj.Skill, []interface{}{enemy})
+					} else {
+						enemy.TakeDamage(proj.Damage)
+					}
 					proj.Alive = false
 
 					if wasAlive && !enemy.Alive {
@@ -744,6 +706,31 @@ func (g *Game) HandleGameOverInput() {
 		g.State = RunStateMenu
 		g.ResetState()
 	}
+}
+
+func (g *Game) GetPlayerMoveSpeed() float32 {
+	speed := g.Player.MoveSpeed
+
+	if gamedata.HasEffect(&g.Player.Effects, gamedata.EffectSlow) {
+		magnitude := gamedata.GetEffectMagnitude(&g.Player.Effects, gamedata.EffectSlow)
+		speed *= (1.0 - magnitude)
+	}
+	if gamedata.HasEffect(&g.Player.Effects, gamedata.EffectFreeze) {
+		return 0
+	}
+	if gamedata.HasEffect(&g.Player.Effects, gamedata.EffectStun) {
+		return 0
+	}
+	if gamedata.HasEffect(&g.Player.Effects, gamedata.EffectMoveSpeedReduction) {
+		magnitude := gamedata.GetEffectMagnitude(&g.Player.Effects, gamedata.EffectMoveSpeedReduction)
+		speed *= (1.0 - magnitude)
+	}
+	if gamedata.HasEffect(&g.Player.Effects, gamedata.EffectMoveSpeedBoost) {
+		magnitude := gamedata.GetEffectMagnitude(&g.Player.Effects, gamedata.EffectMoveSpeedBoost)
+		speed *= (1.0 + magnitude)
+	}
+
+	return speed
 }
 
 func (g *Game) HandleRewardSelectionInput() {
