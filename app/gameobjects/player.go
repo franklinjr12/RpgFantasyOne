@@ -3,29 +3,31 @@ package gameobjects
 import "singlefantasy/app/gamedata"
 
 type Player struct {
-	X                float32
-	Y                float32
-	Width            float32
-	Height           float32
-	Health           int
-	MaxHealth        int
-	Mana             int
-	MaxMana          int
-	MoveSpeed        float32
-	AttackDamage     int
-	AttackRange      float32
-	HitFlashTimer    float32
-	Class            *gamedata.Class
-	Stats            *gamedata.Stats
-	Level            int
-	XP               int
-	XPToNext         int
-	StatPoints       int
-	Skills           []*gamedata.Skill
-	ManaShieldActive bool
-	ManaShieldAmount int
-	Equipment        map[gamedata.ItemSlot]*gamedata.Item
-	Effects          []gamedata.EffectInstance
+	X                     float32
+	Y                     float32
+	Width                 float32
+	Height                float32
+	Health                int
+	MaxHealth             int
+	Mana                  int
+	MaxMana               int
+	MoveSpeed             float32
+	AttackDamage          int
+	AttackRange           float32
+	HitFlashTimer         float32
+	Class                 *gamedata.Class
+	Stats                 *gamedata.Stats
+	Level                 int
+	XP                    int
+	XPToNext              int
+	StatPoints            int
+	Skills                []*gamedata.Skill
+	ManaShieldActive      bool
+	ManaShieldAmount      int
+	Equipment             map[gamedata.ItemSlot]*gamedata.Item
+	Effects               []gamedata.EffectInstance
+	AttackCooldown        float32
+	CurrentAttackCooldown float32
 }
 
 func NewPlayer(x, y float32, classType gamedata.ClassType) *Player {
@@ -33,25 +35,27 @@ func NewPlayer(x, y float32, classType gamedata.ClassType) *Player {
 	stats := gamedata.NewStats()
 
 	player := &Player{
-		X:             x,
-		Y:             y,
-		Width:         40,
-		Height:        40,
-		Health:        100,
-		MaxHealth:     100,
-		Mana:          50,
-		MaxMana:       50,
-		MoveSpeed:     200,
-		AttackDamage:  10,
-		AttackRange:   class.AttackRange,
-		HitFlashTimer: 0,
-		Class:         class,
-		Stats:         stats,
-		Level:         1,
-		XP:            0,
-		XPToNext:      100,
-		StatPoints:    0,
-		Equipment:     make(map[gamedata.ItemSlot]*gamedata.Item),
+		X:                     x,
+		Y:                     y,
+		Width:                 40,
+		Height:                40,
+		Health:                100,
+		MaxHealth:             100,
+		Mana:                  50,
+		MaxMana:               50,
+		MoveSpeed:             200,
+		AttackDamage:          10,
+		AttackRange:           class.AttackRange,
+		HitFlashTimer:         0,
+		Class:                 class,
+		Stats:                 stats,
+		Level:                 1,
+		XP:                    0,
+		XPToNext:              100,
+		StatPoints:            0,
+		Equipment:             make(map[gamedata.ItemSlot]*gamedata.Item),
+		AttackCooldown:        1.0,
+		CurrentAttackCooldown: 0,
 	}
 
 	player.ApplyStats()
@@ -102,6 +106,13 @@ func (p *Player) Update(deltaTime float32) {
 		p.HitFlashTimer -= deltaTime
 		if p.HitFlashTimer < 0 {
 			p.HitFlashTimer = 0
+		}
+	}
+
+	if p.CurrentAttackCooldown > 0 {
+		p.CurrentAttackCooldown -= deltaTime
+		if p.CurrentAttackCooldown < 0 {
+			p.CurrentAttackCooldown = 0
 		}
 	}
 
@@ -181,4 +192,29 @@ func (p *Player) UseMana(amount int) {
 	if p.Mana < 0 {
 		p.Mana = 0
 	}
+}
+
+func (p *Player) GetAttackCooldown() float32 {
+	baseStats := *p.Stats
+	for _, item := range p.Equipment {
+		if item != nil {
+			for statType, bonus := range item.StatBonuses {
+				baseStats.AddStat(statType, bonus)
+			}
+		}
+	}
+	attackSpeed := baseStats.CalculateAttackSpeed(1.0)
+	return p.AttackCooldown / attackSpeed
+}
+
+func (p *Player) GetAutoAttackDamage() int {
+	baseStats := *p.Stats
+	for _, item := range p.Equipment {
+		if item != nil {
+			for statType, bonus := range item.StatBonuses {
+				baseStats.AddStat(statType, bonus)
+			}
+		}
+	}
+	return baseStats.CalculateAutoAttackDamage(p.AttackDamage)
 }

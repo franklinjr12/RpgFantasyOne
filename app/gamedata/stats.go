@@ -88,3 +88,6 @@ func (s *Stats) CalculateCritChance() float32 {
 	return float32(s.DEX+s.LUK) * 0.5
 }
 
+func (s *Stats) CalculateAutoAttackDamage(baseDamage int) int {
+	return baseDamage + s.STR*2
+}

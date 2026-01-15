@@ -37,6 +37,7 @@ type Game struct {
 	PlayerMoveTargetX   float32
 	PlayerMoveTargetY   float32
 	HasPlayerMoveTarget bool
+	PlayerAttackTarget  interface{}
 }
 
 type Projectile struct {
@@ -69,6 +70,7 @@ func NewGame() *Game {
 		PlayerMoveTargetX:   0,
 		PlayerMoveTargetY:   0,
 		HasPlayerMoveTarget: false,
+		PlayerAttackTarget:  nil,
 	}
 }
 
@@ -191,6 +193,153 @@ func (g *Game) IsMenuOpen() bool {
 	return g.LevelUpMenu || g.State == RunStateRewardSelection
 }
 
+func (g *Game) UpdateAutoAttack(deltaTime float32) {
+	if g.PlayerAttackTarget == nil {
+		return
+	}
+
+	var targetAlive bool
+	var targetX, targetY float32
+	var targetWidth, targetHeight float32
+
+	switch t := g.PlayerAttackTarget.(type) {
+	case *gameobjects.Enemy:
+		if !t.Alive {
+			g.PlayerAttackTarget = nil
+			return
+		}
+		targetAlive = true
+		targetX = t.X
+		targetY = t.Y
+		targetWidth = t.Width
+		targetHeight = t.Height
+	case *gameobjects.Boss:
+		if t.Enemy == nil || !t.Alive {
+			g.PlayerAttackTarget = nil
+			return
+		}
+		targetAlive = true
+		targetX = t.X
+		targetY = t.Y
+		targetWidth = t.Width
+		targetHeight = t.Height
+	default:
+		g.PlayerAttackTarget = nil
+		return
+	}
+
+	if !targetAlive {
+		g.PlayerAttackTarget = nil
+		return
+	}
+
+	playerCenterX := g.Player.X + g.Player.Width/2
+	playerCenterY := g.Player.Y + g.Player.Height/2
+	targetCenterX := targetX + targetWidth/2
+	targetCenterY := targetY + targetHeight/2
+
+	distance := systems.GetDistance(playerCenterX, playerCenterY, targetCenterX, targetCenterY)
+
+	if distance > g.Player.AttackRange {
+		if g.Player.Class.Type == gamedata.ClassTypeRanged {
+			g.PlayerMoveTargetX = targetCenterX
+			g.PlayerMoveTargetY = targetCenterY
+			g.HasPlayerMoveTarget = true
+		} else {
+			g.PlayerMoveTargetX = targetCenterX
+			g.PlayerMoveTargetY = targetCenterY
+			g.HasPlayerMoveTarget = true
+		}
+		return
+	}
+
+	if g.Player.Class.Type == gamedata.ClassTypeRanged {
+		g.HasPlayerMoveTarget = false
+	}
+
+	if g.Player.CurrentAttackCooldown > 0 {
+		return
+	}
+
+	damage := g.Player.GetAutoAttackDamage()
+	cooldown := g.Player.GetAttackCooldown()
+
+	switch g.Player.Class.Type {
+	case gamedata.ClassTypeMelee:
+		var wasAlive bool
+		switch t := g.PlayerAttackTarget.(type) {
+		case *gameobjects.Enemy:
+			wasAlive = t.Alive
+			t.TakeDamage(damage)
+			lifesteal := int(float32(damage) * g.Player.Class.LifestealPercent)
+			g.Player.Heal(lifesteal)
+
+			if wasAlive && !t.Alive {
+				g.Player.GainXP(20)
+				g.PlayerAttackTarget = nil
+			}
+		case *gameobjects.Boss:
+			wasAlive = t.Alive
+			t.TakeDamage(damage)
+			lifesteal := int(float32(damage) * g.Player.Class.LifestealPercent)
+			g.Player.Heal(lifesteal)
+
+			if wasAlive && !t.Alive {
+				g.Player.GainXP(100)
+				g.PlayerAttackTarget = nil
+			}
+		}
+
+	case gamedata.ClassTypeRanged:
+		dx := targetCenterX - playerCenterX
+		dy := targetCenterY - playerCenterY
+		dist := systems.GetDistance(0, 0, dx, dy)
+		if dist > 0 {
+			speed := float32(400)
+			proj := &Projectile{
+				X:      playerCenterX,
+				Y:      playerCenterY,
+				VX:     (dx / dist) * speed,
+				VY:     (dy / dist) * speed,
+				Speed:  speed,
+				Damage: damage,
+				Radius: 5,
+				Alive:  true,
+			}
+			g.Projectiles = append(g.Projectiles, proj)
+		}
+
+	case gamedata.ClassTypeCaster:
+		if !g.Player.CanUseMana(g.Player.Class.ManaCost) {
+			return
+		}
+
+		var wasAlive bool
+		switch t := g.PlayerAttackTarget.(type) {
+		case *gameobjects.Enemy:
+			wasAlive = t.Alive
+			t.TakeDamage(damage)
+			g.Player.UseMana(g.Player.Class.ManaCost)
+
+			if wasAlive && !t.Alive {
+				g.Player.GainXP(20)
+				g.PlayerAttackTarget = nil
+			}
+		case *gameobjects.Boss:
+			wasAlive = t.Alive
+			t.TakeDamage(damage)
+			g.Player.UseMana(g.Player.Class.ManaCost)
+
+			if wasAlive && !t.Alive {
+				g.Player.GainXP(100)
+				g.PlayerAttackTarget = nil
+			}
+		}
+	}
+
+	g.Player.CurrentAttackCooldown = cooldown
+}
+
 func (g *Game) Update(deltaTime float32) {
 	if g.State != RunStateInGame {
 		return
@@ -209,6 +358,7 @@ func (g *Game) Update(deltaTime float32) {
 		if skillPressed && i < len(g.Player.Skills) {
 			skill := g.Player.Skills[i]
 			if systems.CanCast(g.Player, skill) {
+				g.PlayerAttackTarget = nil
 				g.TryCastSkill(skill, input)
 			}
 		}
@@ -219,7 +369,10 @@ func (g *Game) Update(deltaTime float32) {
 			g.PlayerMoveTargetX = input.MoveToX
 			g.PlayerMoveTargetY = input.MoveToY
 			g.HasPlayerMoveTarget = true
+			g.PlayerAttackTarget = nil
 		}
+
+		g.UpdateAutoAttack(deltaTime)
 
 		if g.HasPlayerMoveTarget {
 			playerCenterX := g.Player.X + g.Player.Width/2
@@ -261,86 +414,28 @@ func (g *Game) Update(deltaTime float32) {
 		mouseX, mouseY := systems.GetMousePosition()
 		worldX, worldY := systems.ScreenToWorld(mouseX, mouseY, g.Camera)
 
-		switch g.Player.Class.Type {
-		case gamedata.ClassTypeMelee:
-			for _, enemy := range g.Enemies {
-				if !enemy.Alive {
-					continue
-				}
+		targetFound := false
 
-				if worldX >= enemy.X && worldX <= enemy.X+enemy.Width &&
-					worldY >= enemy.Y && worldY <= enemy.Y+enemy.Height {
-
-					playerCenterX := g.Player.X + g.Player.Width/2
-					playerCenterY := g.Player.Y + g.Player.Height/2
-					enemyCenterX := enemy.X + enemy.Width/2
-					enemyCenterY := enemy.Y + enemy.Height/2
-
-					distance := systems.GetDistance(playerCenterX, playerCenterY, enemyCenterX, enemyCenterY)
-
-					if distance <= g.Player.AttackRange {
-						wasAlive := enemy.Alive
-						damage := g.Player.AttackDamage
-						enemy.TakeDamage(damage)
-						lifesteal := int(float32(damage) * g.Player.Class.LifestealPercent)
-						g.Player.Heal(lifesteal)
-
-						if wasAlive && !enemy.Alive {
-							g.Player.GainXP(20)
-						}
-						break
-					}
-				}
+		for _, enemy := range g.Enemies {
+			if !enemy.Alive {
+				continue
 			}
-		case gamedata.ClassTypeRanged:
-			playerCenterX := g.Player.X + g.Player.Width/2
-			playerCenterY := g.Player.Y + g.Player.Height/2
-			dx := worldX - playerCenterX
-			dy := worldY - playerCenterY
-			distance := systems.GetDistance(0, 0, dx, dy)
-			if distance > 0 {
-				speed := float32(400)
-				proj := &Projectile{
-					X:      playerCenterX,
-					Y:      playerCenterY,
-					VX:     (dx / distance) * speed,
-					VY:     (dy / distance) * speed,
-					Speed:  speed,
-					Damage: g.Player.AttackDamage,
-					Radius: 5,
-					Alive:  true,
-				}
-				g.Projectiles = append(g.Projectiles, proj)
+
+			if worldX >= enemy.X && worldX <= enemy.X+enemy.Width &&
+				worldY >= enemy.Y && worldY <= enemy.Y+enemy.Height {
+				g.PlayerAttackTarget = enemy
+				g.HasPlayerMoveTarget = false
+				targetFound = true
+				break
 			}
-		case gamedata.ClassTypeCaster:
-			if g.Player.CanUseMana(g.Player.Class.ManaCost) {
-				for _, enemy := range g.Enemies {
-					if !enemy.Alive {
-						continue
-					}
+		}
 
-					if worldX >= enemy.X && worldX <= enemy.X+enemy.Width &&
-						worldY >= enemy.Y && worldY <= enemy.Y+enemy.Height {
-
-						playerCenterX := g.Player.X + g.Player.Width/2
-						playerCenterY := g.Player.Y + g.Player.Height/2
-						enemyCenterX := enemy.X + enemy.Width/2
-						enemyCenterY := enemy.Y + enemy.Height/2
-
-						distance := systems.GetDistance(playerCenterX, playerCenterY, enemyCenterX, enemyCenterY)
-
-						if distance <= g.Player.AttackRange {
-							wasAlive := enemy.Alive
-							enemy.TakeDamage(g.Player.AttackDamage)
-							g.Player.UseMana(g.Player.Class.ManaCost)
-
-							if wasAlive && !enemy.Alive {
-								g.Player.GainXP(20)
-							}
-						}
-						break
-					}
-				}
+		if !targetFound && g.Boss != nil && g.Boss.Alive {
+			if worldX >= g.Boss.X && worldX <= g.Boss.X+g.Boss.Width &&
+				worldY >= g.Boss.Y && worldY <= g.Boss.Y+g.Boss.Height {
+				g.PlayerAttackTarget = g.Boss
+				g.HasPlayerMoveTarget = false
+				targetFound = true
 			}
 		}
 	}
@@ -425,46 +520,6 @@ func (g *Game) Update(deltaTime float32) {
 				}
 			}
 
-			if input.Attack {
-				mouseX, mouseY := systems.GetMousePosition()
-				worldX, worldY := systems.ScreenToWorld(mouseX, mouseY, g.Camera)
-
-				if worldX >= g.Boss.X && worldX <= g.Boss.X+g.Boss.Width &&
-					worldY >= g.Boss.Y && worldY <= g.Boss.Y+g.Boss.Height {
-
-					playerCenterX := g.Player.X + g.Player.Width/2
-					playerCenterY := g.Player.Y + g.Player.Height/2
-					bossCenterX := g.Boss.X + g.Boss.Width/2
-					bossCenterY := g.Boss.Y + g.Boss.Height/2
-
-					distance := systems.GetDistance(playerCenterX, playerCenterY, bossCenterX, bossCenterY)
-
-					switch g.Player.Class.Type {
-					case gamedata.ClassTypeMelee:
-						if distance <= g.Player.AttackRange {
-							wasAlive := g.Boss.Alive
-							damage := g.Player.AttackDamage
-							g.Boss.TakeDamage(damage)
-							lifesteal := int(float32(damage) * g.Player.Class.LifestealPercent)
-							g.Player.Heal(lifesteal)
-
-							if wasAlive && !g.Boss.Alive {
-								g.Player.GainXP(100)
-							}
-						}
-					case gamedata.ClassTypeCaster:
-						if distance <= g.Player.AttackRange && g.Player.CanUseMana(g.Player.Class.ManaCost) {
-							wasAlive := g.Boss.Alive
-							g.Boss.TakeDamage(g.Player.AttackDamage)
-							g.Player.UseMana(g.Player.Class.ManaCost)
-
-							if wasAlive && !g.Boss.Alive {
-								g.Player.GainXP(100)
-							}
-						}
-					}
-				}
-			}
 		}
 	}
 
