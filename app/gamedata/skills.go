@@ -308,3 +308,7 @@ func (s *Skill) CanUse() bool {
 func (s *Skill) Use() {
 	s.CurrentCooldown = s.Cooldown
 }
+
+func (s *Skill) RemainingCooldown() float32 {
+	return s.CurrentCooldown
+}

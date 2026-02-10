@@ -648,6 +648,7 @@ func (g *Game) Draw() {
 
 		if g.Player != nil {
 			systems.DrawPlayer(g.Player, g.Camera)
+			systems.DrawSkillBar(g.Player)
 		}
 
 		roomText := fmt.Sprintf("Room: %d/%d", g.Dungeon.CurrentRoom+1, len(g.Dungeon.Rooms))

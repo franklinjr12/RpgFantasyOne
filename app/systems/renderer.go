@@ -1,9 +1,11 @@
 package systems
 
 import (
+	"fmt"
 	"math"
 	"sync"
 
+	"singlefantasy/app/gamedata"
 	"singlefantasy/app/gameobjects"
 
 	rl "github.com/gen2brain/raylib-go/raylib"
@@ -29,6 +31,12 @@ type Camera struct {
 	Y      float32
 	Width  float32
 	Height float32
+}
+
+type uiSkillSlot struct {
+	Skill    *gamedata.Skill
+	KeyLabel string
+	Rect     rl.Rectangle
 }
 
 const (
@@ -251,4 +259,100 @@ func getSpriteSourceRect(row, col int) rl.Rectangle {
 	x := float32(col) * spriteWidth
 	y := float32(row) * spriteHeight
 	return rl.NewRectangle(x, y, spriteWidth, spriteHeight)
+}
+
+func DrawSkillBar(player *gameobjects.Player) {
+	if player == nil {
+		return
+	}
+
+	screenWidth := float32(rl.GetScreenWidth())
+	screenHeight := float32(rl.GetScreenHeight())
+
+	slotCount := 4
+	slotWidth := float32(80)
+	slotHeight := float32(80)
+	slotSpacing := float32(10)
+	barPadding := float32(10)
+
+	totalSlotsWidth := float32(slotCount)*slotWidth + float32(slotCount-1)*slotSpacing
+	barWidth := totalSlotsWidth + barPadding*2
+	barHeight := slotHeight + barPadding*2
+
+	barX := (screenWidth - barWidth) / 2
+	barY := screenHeight - barHeight - 20
+
+	barRect := rl.NewRectangle(barX, barY, barWidth, barHeight)
+	rl.DrawRectangleRec(barRect, rl.NewColor(0, 0, 0, 180))
+
+	keyLabels := []string{"Q", "W", "E", "R"}
+
+	var slots []uiSkillSlot
+
+	for i := 0; i < slotCount; i++ {
+		slotX := barX + barPadding + float32(i)*(slotWidth+slotSpacing)
+		slotY := barY + barPadding
+		slotRect := rl.NewRectangle(slotX, slotY, slotWidth, slotHeight)
+
+		var skill *gamedata.Skill
+		if i < len(player.Skills) {
+			skill = player.Skills[i]
+		}
+
+		keyLabel := ""
+		if i < len(keyLabels) {
+			keyLabel = keyLabels[i]
+		}
+
+		slots = append(slots, uiSkillSlot{
+			Skill:    skill,
+			KeyLabel: keyLabel,
+			Rect:     slotRect,
+		})
+	}
+
+	for _, slot := range slots {
+		slotX := slot.Rect.X
+		slotY := slot.Rect.Y
+		slotWidth := slot.Rect.Width
+		slotHeight := slot.Rect.Height
+
+		rl.DrawRectangleRec(slot.Rect, rl.NewColor(50, 50, 50, 255))
+		rl.DrawRectangleLinesEx(slot.Rect, 2, rl.NewColor(200, 200, 200, 255))
+
+		iconMargin := float32(8)
+		iconRect := rl.NewRectangle(slotX+iconMargin, slotY+iconMargin, slotWidth-2*iconMargin, slotHeight-2*iconMargin)
+		rl.DrawRectangleRec(iconRect, rl.NewColor(80, 80, 80, 255))
+
+		if slot.KeyLabel != "" {
+			textWidth := rl.MeasureText(slot.KeyLabel, 20)
+			textX := int32(slotX + 5)
+			textY := int32(slotY + slotHeight - 22)
+			rl.DrawRectangle(textX-2, textY-2, int32(textWidth)+4, 24, rl.NewColor(0, 0, 0, 180))
+			rl.DrawText(slot.KeyLabel, textX, textY, 20, rl.RayWhite)
+		}
+
+		if slot.Skill != nil {
+			remaining := slot.Skill.RemainingCooldown()
+			if remaining > 0 && slot.Skill.Cooldown > 0 {
+				ratio := remaining / slot.Skill.Cooldown
+				if ratio < 0 {
+					ratio = 0
+				}
+				if ratio > 1 {
+					ratio = 1
+				}
+
+				overlayHeight := slotHeight * ratio
+				overlayRect := rl.NewRectangle(slotX, slotY+slotHeight-overlayHeight, slotWidth, overlayHeight)
+				rl.DrawRectangleRec(overlayRect, rl.NewColor(0, 0, 0, 150))
+
+				text := fmt.Sprintf("%.1f", remaining)
+				textWidth := rl.MeasureText(text, 18)
+				textX := int32(slotX + (slotWidth-float32(textWidth))/2)
+				textY := int32(slotY + slotHeight/2 - 9)
+				rl.DrawText(text, textX, textY, 18, rl.RayWhite)
+			}
+		}
+	}
 }
