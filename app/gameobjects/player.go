@@ -1,14 +1,12 @@
 package gameobjects
 
-import "singlefantasy/app/gamedata"
+import (
+	"singlefantasy/app/core"
+	"singlefantasy/app/gamedata"
+)
 
 type Player struct {
-	X                     float32
-	Y                     float32
-	Width                 float32
-	Height                float32
-	Health                int
-	MaxHealth             int
+	core.Entity
 	Mana                  int
 	MaxMana               int
 	MoveSpeed             float32
@@ -16,7 +14,6 @@ type Player struct {
 	AttackRange           float32
 	HitFlashTimer         float32
 	Class                 *gamedata.Class
-	Stats                 *gamedata.Stats
 	Level                 int
 	XP                    int
 	XPToNext              int
@@ -25,22 +22,25 @@ type Player struct {
 	ManaShieldActive      bool
 	ManaShieldAmount      int
 	Equipment             map[gamedata.ItemSlot]*gamedata.Item
-	Effects               []gamedata.EffectInstance
 	AttackCooldown        float32
 	CurrentAttackCooldown float32
 }
 
 func NewPlayer(x, y float32, classType gamedata.ClassType) *Player {
-	class := gamedata.GetClass(classType)
+	class := gamedata.GetClassData(classType)
 	stats := gamedata.NewStats()
 
 	player := &Player{
-		X:                     x,
-		Y:                     y,
-		Width:                 40,
-		Height:                40,
-		Health:                100,
-		MaxHealth:             100,
+		Entity: core.Entity{
+			PosX:    x,
+			PosY:    y,
+			HP:      100,
+			MaxHP:   100,
+			Stats:   stats,
+			Hitbox:  core.Hitbox{Width: 40, Height: 40},
+			Faction: core.FactionPlayer,
+			Alive:   true,
+		},
 		Mana:                  50,
 		MaxMana:               50,
 		MoveSpeed:             200,
@@ -48,7 +48,6 @@ func NewPlayer(x, y float32, classType gamedata.ClassType) *Player {
 		AttackRange:           class.AttackRange,
 		HitFlashTimer:         0,
 		Class:                 class,
-		Stats:                 stats,
 		Level:                 1,
 		XP:                    0,
 		XPToNext:              100,
@@ -59,12 +58,12 @@ func NewPlayer(x, y float32, classType gamedata.ClassType) *Player {
 	}
 
 	player.ApplyStats()
-	player.Skills = gamedata.GetClassSkills(classType)
+	player.Skills = gamedata.GetClassSkillData(classType)
 	return player
 }
 
 func (p *Player) ApplyStats() {
-	baseStats := *p.Stats
+	baseStats := *p.Entity.Stats
 
 	for _, item := range p.Equipment {
 		if item != nil {
@@ -74,9 +73,9 @@ func (p *Player) ApplyStats() {
 		}
 	}
 
-	p.MaxHealth = baseStats.CalculateMaxHealth(100)
-	if p.Health > p.MaxHealth {
-		p.Health = p.MaxHealth
+	p.MaxHP = baseStats.CalculateMaxHealth(100)
+	if p.HP > p.MaxHP {
+		p.HP = p.MaxHP
 	}
 
 	p.MaxMana = baseStats.CalculateMaxMana(50)
@@ -120,7 +119,7 @@ func (p *Player) Update(deltaTime float32) {
 		skill.Update(deltaTime)
 	}
 
-	gamedata.UpdateEffects(&p.Effects, deltaTime, p.TakeDamage)
+	gamedata.UpdateEffects(&p.Entity.Effects, deltaTime, p.TakeDamage)
 
 	if p.Mana < p.MaxMana {
 		p.Mana += int(deltaTime * 5)
@@ -131,8 +130,8 @@ func (p *Player) Update(deltaTime float32) {
 }
 
 func (p *Player) TakeDamage(damage int) {
-	if gamedata.HasEffect(&p.Effects, gamedata.EffectDamageReduction) {
-		magnitude := gamedata.GetEffectMagnitude(&p.Effects, gamedata.EffectDamageReduction)
+	if gamedata.HasEffect(&p.Entity.Effects, gamedata.EffectDamageReduction) {
+		magnitude := gamedata.GetEffectMagnitude(&p.Entity.Effects, gamedata.EffectDamageReduction)
 		damage = int(float32(damage) * (1.0 - magnitude))
 	}
 
@@ -147,18 +146,12 @@ func (p *Player) TakeDamage(damage int) {
 		}
 	}
 
-	p.Health -= damage
-	if p.Health < 0 {
-		p.Health = 0
-	}
+	p.Entity.ApplyDamage(damage)
 	p.HitFlashTimer = 0.2
 }
 
 func (p *Player) Heal(amount int) {
-	p.Health += amount
-	if p.Health > p.MaxHealth {
-		p.Health = p.MaxHealth
-	}
+	p.Entity.Heal(amount)
 }
 
 func (p *Player) GainXP(amount int) {
@@ -180,7 +173,7 @@ func (p *Player) AddStatPoint(statType gamedata.StatType) {
 }
 
 func (p *Player) IsAlive() bool {
-	return p.Health > 0
+	return p.Entity.IsAlive()
 }
 
 func (p *Player) CanUseMana(amount int) bool {
@@ -195,7 +188,7 @@ func (p *Player) UseMana(amount int) {
 }
 
 func (p *Player) GetAttackCooldown() float32 {
-	baseStats := *p.Stats
+	baseStats := *p.Entity.Stats
 	for _, item := range p.Equipment {
 		if item != nil {
 			for statType, bonus := range item.StatBonuses {
@@ -208,7 +201,7 @@ func (p *Player) GetAttackCooldown() float32 {
 }
 
 func (p *Player) GetAutoAttackDamage() int {
-	baseStats := *p.Stats
+	baseStats := *p.Entity.Stats
 	for _, item := range p.Equipment {
 		if item != nil {
 			for statType, bonus := range item.StatBonuses {

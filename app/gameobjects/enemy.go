@@ -2,6 +2,7 @@ package gameobjects
 
 import (
 	"math"
+	"singlefantasy/app/core"
 	"singlefantasy/app/gamedata"
 )
 
@@ -14,12 +15,7 @@ const (
 )
 
 type Enemy struct {
-	X                float32
-	Y                float32
-	Width            float32
-	Height           float32
-	Health           int
-	MaxHealth        int
+	core.Entity
 	Damage           int
 	MoveSpeed        float32
 	AttackCooldown   float32
@@ -30,46 +26,39 @@ type Enemy struct {
 	AttackFlashTimer float32
 	FacingRight      bool
 	State            EnemyState
-	Alive            bool
 	IsElite          bool
-	Effects          []gamedata.EffectInstance
 }
 
 func NewEnemy(x, y float32, isElite bool) *Enemy {
-	health := 50
-	damage := 5
-	moveSpeed := float32(100)
-
-	if isElite {
-		health = 100
-		damage = 10
-		moveSpeed = 120
-	}
+	template := gamedata.GetEnemyTemplateByTier(isElite)
 
 	return &Enemy{
-		X:                x,
-		Y:                y,
-		Width:            30,
-		Height:           30,
-		Health:           health,
-		MaxHealth:        health,
-		Damage:           damage,
-		MoveSpeed:        moveSpeed,
-		AttackCooldown:   1.0,
+		Entity: core.Entity{
+			PosX:    x,
+			PosY:    y,
+			HP:      template.MaxHP,
+			MaxHP:   template.MaxHP,
+			Stats:   nil,
+			Hitbox:  core.Hitbox{Width: template.Width, Height: template.Height},
+			Faction: core.FactionEnemy,
+			Alive:   true,
+		},
+		Damage:           template.Damage,
+		MoveSpeed:        template.MoveSpeed,
+		AttackCooldown:   template.AttackCooldown,
 		CurrentCooldown:  0,
-		AttackRange:      60,
-		AggroRange:       150,
+		AttackRange:      template.AttackRange,
+		AggroRange:       template.AggroRange,
 		HitFlashTimer:    0,
 		AttackFlashTimer: 0,
 		FacingRight:      true,
 		State:            EnemyStateIdle,
-		Alive:            true,
 		IsElite:          isElite,
 	}
 }
 
 func (e *Enemy) Update(deltaTime float32, playerX, playerY float32) {
-	if !e.Alive {
+	if !e.Entity.IsAlive() {
 		return
 	}
 
@@ -94,12 +83,12 @@ func (e *Enemy) Update(deltaTime float32, playerX, playerY float32) {
 		}
 	}
 
-	gamedata.UpdateEffects(&e.Effects, deltaTime, e.TakeDamage)
+	gamedata.UpdateEffects(&e.Entity.Effects, deltaTime, e.TakeDamage)
 
 	playerCenterX := playerX
 	playerCenterY := playerY
-	enemyCenterX := e.X + e.Width/2
-	enemyCenterY := e.Y + e.Height/2
+	enemyCenterX := e.PosX + e.Hitbox.Width/2
+	enemyCenterY := e.PosY + e.Hitbox.Height/2
 
 	dx := playerCenterX - enemyCenterX
 	dy := playerCenterY - enemyCenterY
@@ -120,8 +109,8 @@ func (e *Enemy) Update(deltaTime float32, playerX, playerY float32) {
 		if distanceSqrt > 0 {
 			moveX := (dx / distanceSqrt) * e.MoveSpeed * deltaTime
 			moveY := (dy / distanceSqrt) * e.MoveSpeed * deltaTime
-			e.X += moveX
-			e.Y += moveY
+			e.PosX += moveX
+			e.PosY += moveY
 
 			if moveX > 0 {
 				e.FacingRight = true
@@ -145,12 +134,6 @@ func (e *Enemy) Attack(player *Player) bool {
 }
 
 func (e *Enemy) TakeDamage(damage int) {
-	e.Health -= damage
-	if e.Health < 0 {
-		e.Health = 0
-	}
-	if e.Health <= 0 {
-		e.Alive = false
-	}
+	e.Entity.ApplyDamage(damage)
 	e.HitFlashTimer = 0.2
 }

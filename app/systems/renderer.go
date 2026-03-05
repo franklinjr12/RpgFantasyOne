@@ -101,7 +101,7 @@ func UpdateCamera(camera *Camera, playerX, playerY, worldWidth, worldHeight floa
 }
 
 func DrawPlayer(player *gameobjects.Player, camera *Camera) {
-	screenX, screenY := WorldToScreen(player.X, player.Y, camera)
+	screenX, screenY := WorldToScreen(player.PosX, player.PosY, camera)
 
 	var sourceRect rl.Rectangle
 	switch player.Class.Type {
@@ -115,7 +115,7 @@ func DrawPlayer(player *gameobjects.Player, camera *Camera) {
 		sourceRect = getSpriteSourceRect(0, 0)
 	}
 
-	destRect := rl.NewRectangle(screenX, screenY, player.Width, player.Height)
+	destRect := rl.NewRectangle(screenX, screenY, player.Hitbox.Width, player.Hitbox.Height)
 
 	tint := rl.White
 	if player.HitFlashTimer > 0 {
@@ -124,11 +124,11 @@ func DrawPlayer(player *gameobjects.Player, camera *Camera) {
 
 	drawTextureOrRect(GetSpriteSheet(), sourceRect, destRect, tint, rl.Blue)
 
-	healthBarWidth := player.Width
+	healthBarWidth := player.Hitbox.Width
 	healthBarHeight := float32(5)
 	healthBarX := screenX
 	healthBarY := screenY - healthBarHeight - 3
-	healthPercent := float32(player.Health) / float32(player.MaxHealth)
+	healthPercent := float32(player.HP) / float32(player.MaxHP)
 	if healthPercent < 0 {
 		healthPercent = 0
 	}
@@ -141,14 +141,14 @@ func DrawPlayer(player *gameobjects.Player, camera *Camera) {
 }
 
 func DrawEnemy(enemy *gameobjects.Enemy, camera *Camera) {
-	if !enemy.Alive {
+	if !enemy.IsAlive() {
 		return
 	}
 
-	screenX, screenY := WorldToScreen(enemy.X, enemy.Y, camera)
+	screenX, screenY := WorldToScreen(enemy.PosX, enemy.PosY, camera)
 
 	sourceRect := getSpriteSourceRect(2, 4) // row 3, column 5 (0-indexed: row 2, col 4)
-	destRect := rl.NewRectangle(screenX, screenY, enemy.Width, enemy.Height)
+	destRect := rl.NewRectangle(screenX, screenY, enemy.Hitbox.Width, enemy.Hitbox.Height)
 
 	tint := rl.White
 	if enemy.HitFlashTimer > 0 {
@@ -161,11 +161,11 @@ func DrawEnemy(enemy *gameobjects.Enemy, camera *Camera) {
 
 	drawTextureOrRect(GetSpriteSheet(), sourceRect, destRect, tint, rl.Red)
 
-	healthBarWidth := enemy.Width
+	healthBarWidth := enemy.Hitbox.Width
 	healthBarHeight := float32(5)
 	healthBarX := screenX
 	healthBarY := screenY - healthBarHeight - 3
-	healthPercent := float32(enemy.Health) / float32(enemy.MaxHealth)
+	healthPercent := float32(enemy.HP) / float32(enemy.MaxHP)
 	if healthPercent < 0 {
 		healthPercent = 0
 	}
@@ -197,14 +197,14 @@ func DrawProjectile(x, y, radius float32, camera *Camera) {
 }
 
 func DrawBoss(boss *gameobjects.Boss, camera *Camera) {
-	if !boss.Alive {
+	if !boss.IsAlive() {
 		return
 	}
 
-	screenX, screenY := WorldToScreen(boss.X, boss.Y, camera)
+	screenX, screenY := WorldToScreen(boss.PosX, boss.PosY, camera)
 
 	sourceRect := getSpriteSourceRect(2, 4) // row 3, column 5 (0-indexed: row 2, col 4)
-	destRect := rl.NewRectangle(screenX, screenY, boss.Width, boss.Height)
+	destRect := rl.NewRectangle(screenX, screenY, boss.Hitbox.Width, boss.Hitbox.Height)
 
 	tint := rl.NewColor(136, 0, 255, 255)
 	if boss.HitFlashTimer > 0 {
@@ -214,16 +214,16 @@ func DrawBoss(boss *gameobjects.Boss, camera *Camera) {
 	}
 
 	if boss.TelegraphTimer > 0 {
-		rl.DrawCircleLines(int32(screenX+boss.Width/2), int32(screenY+boss.Height/2), 100, rl.Red)
+		rl.DrawCircleLines(int32(screenX+boss.Hitbox.Width/2), int32(screenY+boss.Hitbox.Height/2), 100, rl.Red)
 	}
 
 	drawTextureOrRect(GetSpriteSheet(), sourceRect, destRect, tint, rl.Purple)
 
-	healthBarWidth := boss.Width
+	healthBarWidth := boss.Hitbox.Width
 	healthBarHeight := float32(8)
 	healthBarX := screenX
 	healthBarY := screenY - healthBarHeight - 5
-	healthPercent := float32(boss.Health) / float32(boss.MaxHealth)
+	healthPercent := float32(boss.HP) / float32(boss.MaxHP)
 	if healthPercent < 0 {
 		healthPercent = 0
 	}
@@ -266,7 +266,7 @@ func drawTextureOrRect(texture rl.Texture2D, sourceRect, destRect rl.Rectangle, 
 	rl.DrawRectangleLinesEx(destRect, 1, rl.Black)
 }
 
-func DrawSkillBar(player *gameobjects.Player) {
+func DrawSkillBar(player *gameobjects.Player, keyLabels []string) {
 	if player == nil {
 		return
 	}
@@ -290,7 +290,9 @@ func DrawSkillBar(player *gameobjects.Player) {
 	barRect := rl.NewRectangle(barX, barY, barWidth, barHeight)
 	rl.DrawRectangleRec(barRect, rl.NewColor(0, 0, 0, 180))
 
-	keyLabels := []string{"Q", "W", "E", "R"}
+	if len(keyLabels) == 0 {
+		keyLabels = []string{"Q", "W", "E", "R"}
+	}
 
 	var slots []uiSkillSlot
 

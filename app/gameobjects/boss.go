@@ -1,6 +1,9 @@
 package gameobjects
 
-import "math"
+import (
+	"math"
+	"singlefantasy/app/gamedata"
+)
 
 type BossPhase int
 
@@ -31,15 +34,17 @@ type BossProjectile struct {
 }
 
 func NewBoss(x, y float32) *Boss {
+	template := gamedata.GetEnemyTemplate(gamedata.EnemyTemplateBoss)
 	enemy := NewEnemy(x, y, false)
-	enemy.Health = 500
-	enemy.MaxHealth = 500
-	enemy.Damage = 15
-	enemy.MoveSpeed = 80
-	enemy.AttackRange = 80
-	enemy.AggroRange = 1000
-	enemy.Width = 60
-	enemy.Height = 60
+	enemy.HP = template.MaxHP
+	enemy.MaxHP = template.MaxHP
+	enemy.Damage = template.Damage
+	enemy.MoveSpeed = template.MoveSpeed
+	enemy.AttackRange = template.AttackRange
+	enemy.AggroRange = template.AggroRange
+	enemy.AttackCooldown = template.AttackCooldown
+	enemy.Hitbox.Width = template.Width
+	enemy.Hitbox.Height = template.Height
 
 	return &Boss{
 		Enemy:            enemy,
@@ -52,11 +57,11 @@ func NewBoss(x, y float32) *Boss {
 }
 
 func (b *Boss) Update(deltaTime float32, playerX, playerY float32) {
-	if !b.Alive {
+	if !b.Entity.IsAlive() {
 		return
 	}
 
-	healthPercent := float32(b.Health) / float32(b.MaxHealth)
+	healthPercent := float32(b.HP) / float32(b.MaxHP)
 	if healthPercent < 0.33 {
 		b.Phase = BossPhase3
 	} else if healthPercent < 0.66 {
@@ -87,8 +92,8 @@ func (b *Boss) Update(deltaTime float32, playerX, playerY float32) {
 
 	if b.State == EnemyStateAttacking && b.CurrentCooldown <= 0 {
 		if b.Phase >= BossPhase2 {
-			bossCenterX := b.X + b.Width/2
-			bossCenterY := b.Y + b.Height/2
+			bossCenterX := b.PosX + b.Hitbox.Width/2
+			bossCenterY := b.PosY + b.Hitbox.Height/2
 			dx := playerX - bossCenterX
 			dy := playerY - bossCenterY
 			distance := float32(math.Sqrt(float64(dx*dx + dy*dy)))

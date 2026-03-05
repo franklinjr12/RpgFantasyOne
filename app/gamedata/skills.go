@@ -66,8 +66,8 @@ func NewSkill(skillType SkillType) *Skill {
 				Type: DeliveryInstant,
 			},
 			Effects: []EffectSpec{
-				{Type: int(EffectDamageReduction), Duration: 4.0, Magnitude: 0.4},
-				{Type: int(EffectMoveSpeedReduction), Duration: 4.0, Magnitude: 0.3},
+				{Type: EffectDamageReduction, Duration: 4.0, Magnitude: 0.4},
+				{Type: EffectMoveSpeedReduction, Duration: 4.0, Magnitude: 0.3},
 			},
 		}
 	case SkillTypeBloodOath:
@@ -83,7 +83,7 @@ func NewSkill(skillType SkillType) *Skill {
 				Type: DeliveryInstant,
 			},
 			Effects: []EffectSpec{
-				{Type: int(EffectLifesteal), Duration: 5.0, Magnitude: 0.3},
+				{Type: EffectLifesteal, Duration: 5.0, Magnitude: 0.3},
 			},
 		}
 	case SkillTypeShockwaveSlam:
@@ -106,7 +106,7 @@ func NewSkill(skillType SkillType) *Skill {
 				DamageType: DamagePhysical,
 			},
 			Effects: []EffectSpec{
-				{Type: int(EffectSlow), Duration: 2.0, Magnitude: 0.3},
+				{Type: EffectSlow, Duration: 2.0, Magnitude: 0.3},
 			},
 		}
 	case SkillTypeQuickShot:
@@ -143,7 +143,7 @@ func NewSkill(skillType SkillType) *Skill {
 				Type: DeliveryInstant,
 			},
 			Effects: []EffectSpec{
-				{Type: int(EffectMoveSpeedBoost), Duration: 2.0, Magnitude: 0.5},
+				{Type: EffectMoveSpeedBoost, Duration: 2.0, Magnitude: 0.5},
 			},
 		}
 	case SkillTypeFocusedAim:
@@ -159,8 +159,8 @@ func NewSkill(skillType SkillType) *Skill {
 				Type: DeliveryInstant,
 			},
 			Effects: []EffectSpec{
-				{Type: int(EffectDamageBoost), Duration: 5.0, Magnitude: 0.5},
-				{Type: int(EffectMoveSpeedReduction), Duration: 5.0, Magnitude: 0.4},
+				{Type: EffectDamageBoost, Duration: 5.0, Magnitude: 0.5},
+				{Type: EffectMoveSpeedReduction, Duration: 5.0, Magnitude: 0.4},
 			},
 		}
 	case SkillTypePoisonTip:
@@ -184,7 +184,7 @@ func NewSkill(skillType SkillType) *Skill {
 				DamageType: DamagePhysical,
 			},
 			Effects: []EffectSpec{
-				{Type: int(EffectPoison), Duration: 5.0, Magnitude: 3.0, TickRate: 1.0},
+				{Type: EffectPoison, Duration: 5.0, Magnitude: 3.0, TickRate: 1.0},
 			},
 		}
 	case SkillTypeArcaneBolt:
@@ -236,7 +236,7 @@ func NewSkill(skillType SkillType) *Skill {
 				Type: DeliveryInstant,
 			},
 			Effects: []EffectSpec{
-				{Type: int(EffectSlow), Duration: 4.0, Magnitude: 0.5},
+				{Type: EffectSlow, Duration: 4.0, Magnitude: 0.5},
 			},
 		}
 	case SkillTypeArcaneDrain:

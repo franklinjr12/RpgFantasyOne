@@ -12,8 +12,7 @@ func (g *Game) TryCastSkill(skill *gamedata.Skill, input *systems.Input) {
 
 	mouseX, mouseY := systems.GetMousePosition()
 	worldX, worldY := systems.ScreenToWorld(mouseX, mouseY, g.Camera)
-	playerCenterX := g.Player.X + g.Player.Width/2
-	playerCenterY := g.Player.Y + g.Player.Height/2
+	playerCenterX, playerCenterY := g.Player.Center()
 
 	if skill.ManaCost > 0 {
 		if !g.Player.CanUseMana(skill.ManaCost) {
@@ -32,8 +31,8 @@ func (g *Game) TryCastSkill(skill *gamedata.Skill, input *systems.Input) {
 			distance := systems.GetDistance(0, 0, dx, dy)
 			if distance > 0 {
 				rollDistance := float32(80)
-				g.Player.X += (dx / distance) * rollDistance
-				g.Player.Y += (dy / distance) * rollDistance
+				g.Player.PosX += (dx / distance) * rollDistance
+				g.Player.PosY += (dy / distance) * rollDistance
 			}
 		}
 
@@ -60,20 +59,19 @@ func (g *Game) TryCastSkill(skill *gamedata.Skill, input *systems.Input) {
 		distance := systems.GetDistance(0, 0, dx, dy)
 		if distance > 0 {
 			proj := &Projectile{
-				X:         playerCenterX,
-				Y:         playerCenterY,
-				VX:        (dx / distance) * skill.Delivery.Speed,
-				VY:        (dy / distance) * skill.Delivery.Speed,
-				Speed:     skill.Delivery.Speed,
-				Damage:    int(systems.ComputeDamage(skill.DamageSpec, g.Player.Stats)),
-				Radius:    5,
-				Alive:     true,
-				Skill:     skill,
-				Caster:    g.Player,
+				X:      playerCenterX,
+				Y:      playerCenterY,
+				VX:     (dx / distance) * skill.Delivery.Speed,
+				VY:     (dy / distance) * skill.Delivery.Speed,
+				Speed:  skill.Delivery.Speed,
+				Damage: int(systems.ComputeDamage(skill.DamageSpec, g.Player.Stats)),
+				Radius: 5,
+				Alive:  true,
+				Skill:  skill,
+				Caster: g.Player,
 			}
 			g.Projectiles = append(g.Projectiles, proj)
 		}
 		skill.Use()
 	}
 }
-

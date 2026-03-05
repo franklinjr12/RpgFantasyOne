@@ -80,4 +80,3 @@ func GetEffectMagnitude(effects *[]EffectInstance, effectType EffectType) float3
 	}
 	return 0
 }
-

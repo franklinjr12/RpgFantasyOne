@@ -47,9 +47,8 @@ type DamageSpec struct {
 }
 
 type EffectSpec struct {
-	Type      int
+	Type      EffectType
 	Duration  float32
 	Magnitude float32
 	TickRate  float32
 }
-

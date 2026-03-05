@@ -141,3 +141,15 @@ Acceptance criteria:
 - New skills, enemies, items, or content tuning beyond migration needs.
 - Full key rebinding UI/logic (display only in this step).
 - Deep combat redesign (only architecture extraction and behavior parity).
+
+## Smoke Checklist (Post-Refactor)
+- [ ] Boot to menu
+- [ ] Start run with each class
+- [ ] Basic attack and at least one skill cast
+- [ ] Clear room and progress
+- [ ] Reach reward/results
+- [ ] Close and reopen game to confirm settings persistence
+
+Run status:
+- Automated verification completed with `go test ./...` and `go build -o .\output\app.exe .\app`.
+- Manual in-game smoke steps were not executed in this non-interactive environment.

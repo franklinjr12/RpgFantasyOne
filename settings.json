@@ -1,0 +1,12 @@
+{
+  "master_volume": 1,
+  "fullscreen": false,
+  "keybind_display": {
+    "move": "RMB",
+    "attack": "LMB",
+    "skill_1": "Q",
+    "skill_2": "W",
+    "skill_3": "E",
+    "skill_4": "R"
+  }
+}

@@ -1,0 +1,1 @@
+Your goal is to implement the task specified by guidelines\current_task_refinement.md. You Should always read all the refinement file, read any relevant part of the code, think deeply in order to produce the most correct output and finally generate the code. Do not leave TODOs and do not add comments unless its really necessary.

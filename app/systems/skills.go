@@ -6,115 +6,53 @@ import (
 	"singlefantasy/app/gameobjects"
 )
 
-type TargetType int
-
-const (
-	TargetSelf TargetType = iota
-	TargetEnemy
-	TargetArea
-)
-
-type TargetingSpec struct {
-	Type       TargetType
-	Range      float32
-	Radius     float32
-	MaxTargets int
-}
-
-type DeliveryType int
-
-const (
-	DeliveryInstant DeliveryType = iota
-	DeliveryProjectile
-	DeliveryDelayed
-)
-
-type DeliverySpec struct {
-	Type     DeliveryType
-	Speed    float32
-	Delay    float32
-	Lifetime float32
-}
-
-type DamageType int
-
-const (
-	DamagePhysical DamageType = iota
-	DamageMagical
-	DamageTrue
-)
-
-type DamageSpec struct {
-	Base       float32
-	Scaling    map[gamedata.StatType]float32
-	DamageType DamageType
-	CritChance float32
-	CritMult   float32
-}
-
-type EffectSpec struct {
-	Type      EffectType
-	Duration  float32
-	Magnitude float32
-	TickRate  float32
-}
-
 func ComputeDamage(spec *gamedata.DamageSpec, stats *gamedata.Stats) float32 {
-	if spec == nil {
+	if spec == nil || stats == nil {
 		return 0
 	}
-	dmg := spec.Base
 
-	if spec.Scaling != nil {
-		for stat, factor := range spec.Scaling {
-			statValue := float32(stats.GetStat(stat))
-			dmg += statValue * factor
-		}
+	damage := spec.Base
+	for stat, factor := range spec.Scaling {
+		damage += float32(stats.GetStat(stat)) * factor
 	}
 
-	return dmg
+	return damage
 }
 
 func ResolveTargets(caster *gameobjects.Player, intentX, intentY float32, spec gamedata.TargetingSpec, enemies []*gameobjects.Enemy, boss *gameobjects.Boss) []interface{} {
 	var targets []interface{}
 
-	casterX := caster.X + caster.Width/2
-	casterY := caster.Y + caster.Height/2
+	casterX, casterY := caster.Center()
 
 	switch spec.Type {
 	case gamedata.TargetSelf:
 		targets = append(targets, caster)
-
 	case gamedata.TargetEnemy:
-		if spec.Range > 0 {
-			for _, enemy := range enemies {
-				if !enemy.Alive {
-					continue
-				}
-				enemyX := enemy.X + enemy.Width/2
-				enemyY := enemy.Y + enemy.Height/2
-				dx := enemyX - casterX
-				dy := enemyY - casterY
-				distance := float32(math.Sqrt(float64(dx*dx + dy*dy)))
-				if distance <= spec.Range {
-					targets = append(targets, enemy)
-					if len(targets) >= spec.MaxTargets {
-						break
-					}
-				}
+		for _, enemy := range enemies {
+			if !enemy.IsAlive() {
+				continue
 			}
-			if boss != nil && boss.Alive {
-				bossX := boss.X + boss.Width/2
-				bossY := boss.Y + boss.Height/2
-				dx := bossX - casterX
-				dy := bossY - casterY
-				distance := float32(math.Sqrt(float64(dx*dx + dy*dy)))
-				if distance <= spec.Range {
-					targets = append(targets, boss)
+			enemyX, enemyY := enemy.Center()
+			dx := enemyX - casterX
+			dy := enemyY - casterY
+			distance := float32(math.Sqrt(float64(dx*dx + dy*dy)))
+			if distance <= spec.Range {
+				targets = append(targets, enemy)
+				if spec.MaxTargets > 0 && len(targets) >= spec.MaxTargets {
+					break
 				}
 			}
 		}
 
+		if boss != nil && boss.IsAlive() {
+			bossX, bossY := boss.Center()
+			dx := bossX - casterX
+			dy := bossY - casterY
+			distance := float32(math.Sqrt(float64(dx*dx + dy*dy)))
+			if distance <= spec.Range {
+				targets = append(targets, boss)
+			}
+		}
 	case gamedata.TargetArea:
 		centerX := intentX
 		centerY := intentY
@@ -124,24 +62,23 @@ func ResolveTargets(caster *gameobjects.Player, intentX, intentY float32, spec g
 		}
 
 		for _, enemy := range enemies {
-			if !enemy.Alive {
+			if !enemy.IsAlive() {
 				continue
 			}
-			enemyX := enemy.X + enemy.Width/2
-			enemyY := enemy.Y + enemy.Height/2
+			enemyX, enemyY := enemy.Center()
 			dx := enemyX - centerX
 			dy := enemyY - centerY
 			distance := float32(math.Sqrt(float64(dx*dx + dy*dy)))
 			if distance <= spec.Radius {
 				targets = append(targets, enemy)
-				if len(targets) >= spec.MaxTargets {
+				if spec.MaxTargets > 0 && len(targets) >= spec.MaxTargets {
 					break
 				}
 			}
 		}
-		if boss != nil && boss.Alive {
-			bossX := boss.X + boss.Width/2
-			bossY := boss.Y + boss.Height/2
+
+		if boss != nil && boss.IsAlive() {
+			bossX, bossY := boss.Center()
 			dx := bossX - centerX
 			dy := bossY - centerY
 			distance := float32(math.Sqrt(float64(dx*dx + dy*dy)))
@@ -164,16 +101,14 @@ func ApplySkill(caster *gameobjects.Player, skill *gamedata.Skill, targets []int
 				rawDamage *= (1.0 + magnitude)
 			}
 
-			var finalDamage int
+			finalDamage := int(rawDamage)
+
 			switch t := target.(type) {
 			case *gameobjects.Player:
-				finalDamage = int(rawDamage)
 				t.TakeDamage(finalDamage)
 			case *gameobjects.Enemy:
-				finalDamage = int(rawDamage)
 				t.TakeDamage(finalDamage)
 			case *gameobjects.Boss:
-				finalDamage = int(rawDamage)
 				t.TakeDamage(finalDamage)
 			}
 
@@ -189,33 +124,21 @@ func ApplySkill(caster *gameobjects.Player, skill *gamedata.Skill, targets []int
 			}
 		}
 
-		if skill.Effects != nil {
-			for _, effectSpec := range skill.Effects {
-				switch t := target.(type) {
-				case *gameobjects.Player:
-					gamedata.ApplyEffect(&t.Effects, gamedata.Effect{
-						Type:      gamedata.EffectType(effectSpec.Type),
-						Duration:  effectSpec.Duration,
-						Magnitude: effectSpec.Magnitude,
-						TickRate:  effectSpec.TickRate,
-					})
-				case *gameobjects.Enemy:
-					gamedata.ApplyEffect(&t.Effects, gamedata.Effect{
-						Type:      gamedata.EffectType(effectSpec.Type),
-						Duration:  effectSpec.Duration,
-						Magnitude: effectSpec.Magnitude,
-						TickRate:  effectSpec.TickRate,
-					})
-				case *gameobjects.Boss:
-					if t.Enemy != nil {
-						gamedata.ApplyEffect(&t.Enemy.Effects, gamedata.Effect{
-							Type:      gamedata.EffectType(effectSpec.Type),
-							Duration:  effectSpec.Duration,
-							Magnitude: effectSpec.Magnitude,
-							TickRate:  effectSpec.TickRate,
-						})
-					}
-				}
+		for _, effectSpec := range skill.Effects {
+			effect := gamedata.Effect{
+				Type:      effectSpec.Type,
+				Duration:  effectSpec.Duration,
+				Magnitude: effectSpec.Magnitude,
+				TickRate:  effectSpec.TickRate,
+			}
+
+			switch t := target.(type) {
+			case *gameobjects.Player:
+				gamedata.ApplyEffect(&t.Effects, effect)
+			case *gameobjects.Enemy:
+				gamedata.ApplyEffect(&t.Effects, effect)
+			case *gameobjects.Boss:
+				gamedata.ApplyEffect(&t.Effects, effect)
 			}
 		}
 	}
@@ -236,4 +159,3 @@ func CanCast(caster *gameobjects.Player, skill *gamedata.Skill) bool {
 
 	return true
 }
-
