@@ -1,35 +1,52 @@
 package main
 
 import (
+	"singlefantasy/app/assets"
 	"singlefantasy/app/game"
-	"singlefantasy/app/systems"
 
 	rl "github.com/gen2brain/raylib-go/raylib"
 )
 
 func main() {
 	rl.InitWindow(game.WindowWidth, game.WindowHeight, "Single Fantasy")
-	defer rl.CloseWindow()
+	defer func() {
+		assets.Get().UnloadAll()
+		if rl.IsAudioDeviceReady() {
+			rl.CloseAudioDevice()
+		}
+		rl.CloseWindow()
+	}()
 
-	rl.SetTargetFPS(game.TargetFPS)
-
-	systems.LoadSpriteSheet()
+	rl.InitAudioDevice()
+	rl.SetTargetFPS(60)
 
 	g := game.NewGame()
 
-	for !rl.WindowShouldClose() {
-		deltaTime := rl.GetFrameTime()
+	accumulator := float32(0)
 
-		if g.State == game.RunStateMenu {
-			g.HandleMenuInput()
-		} else if g.State == game.RunStateRewardSelection {
-			g.HandleRewardSelectionInput()
-		} else if g.State == game.RunStateVictory || g.State == game.RunStateDefeat {
-			g.HandleGameOverInput()
-		} else {
-			g.Update(deltaTime)
+	for !rl.WindowShouldClose() {
+		frameTime := rl.GetFrameTime()
+		if frameTime > game.MaxFrameTime {
+			frameTime = game.MaxFrameTime
 		}
 
+		g.UpdateFrame()
+
+		accumulator += frameTime
+
+		updateSteps := 0
+		for accumulator >= game.FixedDeltaTime {
+			g.UpdateFixed(game.FixedDeltaTime)
+			accumulator -= game.FixedDeltaTime
+			updateSteps++
+
+			if updateSteps >= game.MaxUpdateSteps {
+				accumulator = 0
+				break
+			}
+		}
+
+		g.SetFrameDiagnostics(frameTime, updateSteps)
 		g.Draw()
 	}
 }

@@ -14,7 +14,16 @@ const (
 const (
 	WindowWidth  = 1600
 	WindowHeight = 900
-	TargetFPS    = 60
+)
+
+const (
+	FixedDeltaTime float32 = 1.0 / 60.0
+	MaxFrameTime   float32 = 0.25
+	MaxUpdateSteps int     = 8
+)
+
+const (
+	DebugToggleKey int32 = rl.KeyF3
 )
 
 const (

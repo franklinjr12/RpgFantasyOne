@@ -2,7 +2,10 @@ package game
 
 import (
 	"fmt"
+	"log"
 	"math"
+
+	"singlefantasy/app/assets"
 	"singlefantasy/app/gamedata"
 	"singlefantasy/app/gameobjects"
 	"singlefantasy/app/systems"
@@ -11,18 +14,28 @@ import (
 	rl "github.com/gen2brain/raylib-go/raylib"
 )
 
-type RunState int
+type AppState int
 
 const (
-	RunStateMenu RunState = iota
-	RunStateInGame
-	RunStateVictory
-	RunStateDefeat
-	RunStateRewardSelection
+	StateBoot AppState = iota
+	StateMainMenu
+	StateClassSelect
+	StateRun
+	StateReward
+	StateResults
 )
 
+type RunResults struct {
+	Victory            bool
+	RunDurationSeconds float32
+	RoomsCleared       int
+	TotalRooms         int
+	SelectedClass      gamedata.ClassType
+	RewardPicked       string
+}
+
 type Game struct {
-	State               RunState
+	State               AppState
 	Player              *gameobjects.Player
 	Enemies             []*gameobjects.Enemy
 	Boss                *gameobjects.Boss
@@ -38,6 +51,12 @@ type Game struct {
 	PlayerMoveTargetY   float32
 	HasPlayerMoveTarget bool
 	PlayerAttackTarget  interface{}
+	DebugOverlayEnabled bool
+	BootCompleted       bool
+	LastFrameTime       float32
+	LastUpdateSteps     int
+	RunElapsed          float32
+	Results             RunResults
 }
 
 type Projectile struct {
@@ -55,7 +74,7 @@ type Projectile struct {
 
 func NewGame() *Game {
 	return &Game{
-		State:               RunStateMenu,
+		State:               StateBoot,
 		Player:              nil,
 		Enemies:             []*gameobjects.Enemy{},
 		Boss:                nil,
@@ -71,7 +90,71 @@ func NewGame() *Game {
 		PlayerMoveTargetY:   0,
 		HasPlayerMoveTarget: false,
 		PlayerAttackTarget:  nil,
+		DebugOverlayEnabled: false,
+		BootCompleted:       false,
+		LastFrameTime:       0,
+		LastUpdateSteps:     0,
+		RunElapsed:          0,
+		Results:             RunResults{},
 	}
+}
+
+func (g *Game) SetFrameDiagnostics(frameTime float32, updateSteps int) {
+	g.LastFrameTime = frameTime
+	g.LastUpdateSteps = updateSteps
+}
+
+func (g *Game) UpdateFrame() {
+	if rl.IsKeyPressed(DebugToggleKey) {
+		g.DebugOverlayEnabled = !g.DebugOverlayEnabled
+	}
+
+	switch g.State {
+	case StateBoot:
+		g.updateBoot()
+	case StateMainMenu:
+		g.updateMainMenu()
+	case StateClassSelect:
+		g.updateClassSelect()
+	case StateReward:
+		g.updateReward()
+	case StateResults:
+		g.updateResults()
+	}
+}
+
+func (g *Game) UpdateFixed(deltaTime float32) {
+	if g.State == StateRun {
+		g.updateRun(deltaTime)
+	}
+}
+
+func (g *Game) updateBoot() {
+	if !g.BootCompleted {
+		manager := assets.Get()
+		manager.LoadTexture(
+			systems.HumanoidSpriteSheetAssetKey,
+			"resources/sprites/Basic Humanoid Sprites 4x.png",
+			288,
+			288,
+			rl.Magenta,
+		)
+		manager.LoadFont(assets.FontDefault, "")
+		manager.LoadSound("sfx.ui.confirm", "resources/audio/ui_confirm.wav")
+		manager.LoadMusic("music.menu", "resources/audio/menu.ogg")
+		g.BootCompleted = true
+	}
+
+	g.EnterMainMenu()
+}
+
+func (g *Game) EnterMainMenu() {
+	g.ResetState()
+	g.State = StateMainMenu
+}
+
+func (g *Game) EnterClassSelect() {
+	g.State = StateClassSelect
 }
 
 func (g *Game) StartRun() {
@@ -79,22 +162,52 @@ func (g *Game) StartRun() {
 	g.Dungeon = world.NewDungeon()
 	g.CurrentRoom = g.Dungeon.GetCurrentRoom()
 
+	if g.CurrentRoom == nil {
+		g.EnterResults(false, "")
+		return
+	}
+
 	startX := g.CurrentRoom.X + g.CurrentRoom.Width/2
 	startY := g.CurrentRoom.Y + g.CurrentRoom.Height/2
 	g.Player = gameobjects.NewPlayer(startX, startY, g.SelectedClass)
 
 	g.SpawnRoomEnemies()
-	g.State = RunStateInGame
+	g.RunElapsed = 0
+	g.State = StateRun
 }
 
-func (g *Game) EndRun(victory bool) {
-	if victory {
-		g.RewardOptions = gamedata.GenerateRewardOptions(g.Player.Class.Type)
-		g.SelectedReward = 0
-		g.State = RunStateRewardSelection
-	} else {
-		g.State = RunStateDefeat
+func (g *Game) EnterReward() {
+	if g.Player == nil {
+		g.EnterResults(false, "")
+		return
 	}
+
+	g.RewardOptions = gamedata.GenerateRewardOptions(g.Player.Class.Type)
+	g.SelectedReward = 0
+	g.State = StateReward
+}
+
+func (g *Game) EnterResults(victory bool, rewardPicked string) {
+	totalRooms := 0
+	roomsCleared := 0
+	if g.Dungeon != nil {
+		totalRooms = len(g.Dungeon.Rooms)
+		for _, room := range g.Dungeon.Rooms {
+			if room.Completed {
+				roomsCleared++
+			}
+		}
+	}
+
+	g.Results = RunResults{
+		Victory:            victory,
+		RunDurationSeconds: g.RunElapsed,
+		RoomsCleared:       roomsCleared,
+		TotalRooms:         totalRooms,
+		SelectedClass:      g.SelectedClass,
+		RewardPicked:       rewardPicked,
+	}
+	g.State = StateResults
 }
 
 func (g *Game) ResetState() {
@@ -105,6 +218,14 @@ func (g *Game) ResetState() {
 	g.Projectiles = []*Projectile{}
 	g.CurrentRoom = nil
 	g.Camera = systems.NewCamera()
+	g.LevelUpMenu = false
+	g.RewardOptions = []*gamedata.Item{}
+	g.SelectedReward = 0
+	g.PlayerMoveTargetX = 0
+	g.PlayerMoveTargetY = 0
+	g.HasPlayerMoveTarget = false
+	g.PlayerAttackTarget = nil
+	g.RunElapsed = 0
 }
 
 func (g *Game) SpawnRoomEnemies() {
@@ -157,25 +278,14 @@ func (g *Game) AdvanceToNextRoom() {
 
 	g.Dungeon.CurrentRoom++
 	if g.Dungeon.CurrentRoom >= len(g.Dungeon.Rooms) {
-		g.EndRun(true)
+		g.EnterReward()
 		return
 	}
 
 	g.CurrentRoom = g.Dungeon.GetCurrentRoom()
-	startX := g.CurrentRoom.X + g.CurrentRoom.Width/2
-	startY := g.CurrentRoom.Y + g.CurrentRoom.Height/2
-	g.Player.X = startX
-	g.Player.Y = startY
-	g.Player.Health = g.Player.MaxHealth
-
-	g.SpawnRoomEnemies()
-	g.Projectiles = []*Projectile{}
-}
-
-func (g *Game) GenerateNewDungeon() {
-	g.Dungeon = world.NewDungeon()
-	g.Dungeon.CurrentRoom = 0
-	g.CurrentRoom = g.Dungeon.GetCurrentRoom()
+	if g.CurrentRoom == nil || g.Player == nil {
+		return
+	}
 
 	startX := g.CurrentRoom.X + g.CurrentRoom.Width/2
 	startY := g.CurrentRoom.Y + g.CurrentRoom.Height/2
@@ -185,16 +295,67 @@ func (g *Game) GenerateNewDungeon() {
 
 	g.SpawnRoomEnemies()
 	g.Projectiles = []*Projectile{}
-	g.HasPlayerMoveTarget = false
-	g.State = RunStateInGame
 }
 
 func (g *Game) IsMenuOpen() bool {
-	return g.LevelUpMenu || g.State == RunStateRewardSelection
+	return g.LevelUpMenu
 }
 
-func (g *Game) UpdateAutoAttack(deltaTime float32) {
-	if g.PlayerAttackTarget == nil {
+func (g *Game) updateMainMenu() {
+	if rl.IsKeyPressed(rl.KeyEnter) || rl.IsKeyPressed(rl.KeySpace) {
+		g.EnterClassSelect()
+	}
+}
+
+func (g *Game) updateClassSelect() {
+	if rl.IsKeyPressed(rl.KeyOne) {
+		g.SelectedClass = gamedata.ClassTypeMelee
+	}
+	if rl.IsKeyPressed(rl.KeyTwo) {
+		g.SelectedClass = gamedata.ClassTypeRanged
+	}
+	if rl.IsKeyPressed(rl.KeyThree) {
+		g.SelectedClass = gamedata.ClassTypeCaster
+	}
+	if rl.IsKeyPressed(rl.KeyEnter) || rl.IsKeyPressed(rl.KeySpace) {
+		g.StartRun()
+	}
+}
+
+func (g *Game) updateReward() {
+	if rl.IsKeyPressed(rl.KeyOne) {
+		g.SelectedReward = 0
+	}
+	if rl.IsKeyPressed(rl.KeyTwo) {
+		g.SelectedReward = 1
+	}
+	if rl.IsKeyPressed(rl.KeyThree) {
+		g.SelectedReward = 2
+	}
+
+	if !rl.IsKeyPressed(rl.KeyEnter) {
+		return
+	}
+
+	rewardPicked := "None"
+	if g.Player != nil && g.SelectedReward >= 0 && g.SelectedReward < len(g.RewardOptions) {
+		item := g.RewardOptions[g.SelectedReward]
+		if item != nil {
+			g.Player.EquipItem(item)
+			rewardPicked = item.Name
+		}
+	}
+	g.EnterResults(true, rewardPicked)
+}
+
+func (g *Game) updateResults() {
+	if rl.IsKeyPressed(rl.KeyEnter) || rl.IsKeyPressed(rl.KeySpace) {
+		g.EnterMainMenu()
+	}
+}
+
+func (g *Game) UpdateAutoAttack(_ float32) {
+	if g.Player == nil || g.PlayerAttackTarget == nil {
 		return
 	}
 
@@ -241,15 +402,9 @@ func (g *Game) UpdateAutoAttack(deltaTime float32) {
 	distance := systems.GetDistance(playerCenterX, playerCenterY, targetCenterX, targetCenterY)
 
 	if distance > g.Player.AttackRange {
-		if g.Player.Class.Type == gamedata.ClassTypeRanged {
-			g.PlayerMoveTargetX = targetCenterX
-			g.PlayerMoveTargetY = targetCenterY
-			g.HasPlayerMoveTarget = true
-		} else {
-			g.PlayerMoveTargetX = targetCenterX
-			g.PlayerMoveTargetY = targetCenterY
-			g.HasPlayerMoveTarget = true
-		}
+		g.PlayerMoveTargetX = targetCenterX
+		g.PlayerMoveTargetY = targetCenterY
+		g.HasPlayerMoveTarget = true
 		return
 	}
 
@@ -340,17 +495,12 @@ func (g *Game) UpdateAutoAttack(deltaTime float32) {
 	g.Player.CurrentAttackCooldown = cooldown
 }
 
-func (g *Game) Update(deltaTime float32) {
-	if g.State != RunStateInGame {
-		return
-	}
-
+func (g *Game) updateRun(deltaTime float32) {
 	if g.Player == nil {
 		return
 	}
 
 	input := systems.UpdateInput(g.Camera)
-
 	isMenuOpen := g.IsMenuOpen()
 
 	skillInputs := []bool{input.Skill1, input.Skill2, input.Skill3, input.Skill4}
@@ -435,12 +585,12 @@ func (g *Game) Update(deltaTime float32) {
 				worldY >= g.Boss.Y && worldY <= g.Boss.Y+g.Boss.Height {
 				g.PlayerAttackTarget = g.Boss
 				g.HasPlayerMoveTarget = false
-				targetFound = true
 			}
 		}
 	}
 
 	if !isMenuOpen {
+		g.RunElapsed += deltaTime
 		g.Player.Update(deltaTime)
 
 		for _, enemy := range g.Enemies {
@@ -470,10 +620,8 @@ func (g *Game) Update(deltaTime float32) {
 					continue
 				}
 
-				if !isMenuOpen {
-					proj.X += proj.VX * deltaTime
-					proj.Y += proj.VY * deltaTime
-				}
+				proj.X += proj.VX * deltaTime
+				proj.Y += proj.VY * deltaTime
 
 				playerCenterX := g.Player.X + g.Player.Width/2
 				playerCenterY := g.Player.Y + g.Player.Height/2
@@ -519,7 +667,6 @@ func (g *Game) Update(deltaTime float32) {
 					break
 				}
 			}
-
 		}
 	}
 
@@ -593,178 +740,291 @@ func (g *Game) Update(deltaTime float32) {
 		if g.Player.StatPoints == 0 {
 			g.LevelUpMenu = false
 		}
-	} else {
-		if g.Player.StatPoints > 0 {
-			g.LevelUpMenu = true
-		}
+	} else if g.Player.StatPoints > 0 {
+		g.LevelUpMenu = true
 	}
 
 	if !g.Player.IsAlive() {
-		g.EndRun(false)
+		g.EnterResults(false, "")
 		return
 	}
 
 	if g.CheckRoomCompletion() {
-		if g.CurrentRoom.IsBoss() {
-			g.EndRun(true)
+		if g.CurrentRoom != nil && g.CurrentRoom.IsBoss() {
+			g.EnterReward()
 		} else {
 			g.AdvanceToNextRoom()
 		}
 	}
 
-	worldWidth, worldHeight := g.Dungeon.GetWorldBounds()
-	systems.UpdateCamera(g.Camera, g.Player.X+g.Player.Width/2, g.Player.Y+g.Player.Height/2, worldWidth, worldHeight)
+	if g.Dungeon != nil {
+		worldWidth, worldHeight := g.Dungeon.GetWorldBounds()
+		systems.UpdateCamera(
+			g.Camera,
+			g.Player.X+g.Player.Width/2,
+			g.Player.Y+g.Player.Height/2,
+			worldWidth,
+			worldHeight,
+		)
+	}
 }
 
 func (g *Game) Draw() {
 	rl.BeginDrawing()
 	rl.ClearBackground(rl.RayWhite)
 
-	if g.State == RunStateInGame {
-		if g.Dungeon != nil {
-			for _, room := range g.Dungeon.Rooms {
-				systems.DrawRoom(room.X, room.Y, room.Width, room.Height, room.IsBoss(), g.Camera)
-			}
-		}
+	switch g.State {
+	case StateBoot:
+		g.drawBootScreen()
+	case StateMainMenu:
+		g.drawMainMenu()
+	case StateClassSelect:
+		g.drawClassSelect()
+	case StateRun:
+		g.drawRun()
+	case StateReward:
+		g.drawRewardSelection()
+	case StateResults:
+		g.drawResults()
+	}
 
-		for _, proj := range g.Projectiles {
-			if proj.Alive {
-				systems.DrawProjectile(proj.X, proj.Y, proj.Radius, g.Camera)
-			}
-		}
-
-		for _, enemy := range g.Enemies {
-			systems.DrawEnemy(enemy, g.Camera)
-		}
-
-		if g.Boss != nil {
-			systems.DrawBoss(g.Boss, g.Camera)
-			for _, proj := range g.Boss.Projectiles {
-				if proj.Alive {
-					systems.DrawBossProjectile(proj.X, proj.Y, proj.Radius, g.Camera)
-				}
-			}
-		}
-
-		if g.Player != nil {
-			systems.DrawPlayer(g.Player, g.Camera)
-			systems.DrawSkillBar(g.Player)
-		}
-
-		roomText := fmt.Sprintf("Room: %d/%d", g.Dungeon.CurrentRoom+1, len(g.Dungeon.Rooms))
-		healthText := fmt.Sprintf("Health: %d/%d", g.Player.Health, g.Player.MaxHealth)
-		manaText := fmt.Sprintf("Mana: %d/%d", g.Player.Mana, g.Player.MaxMana)
-		levelText := fmt.Sprintf("Level: %d | XP: %d/%d", g.Player.Level, g.Player.XP, g.Player.XPToNext)
-		rl.DrawText(roomText, 10, 10, 20, rl.Black)
-		rl.DrawText(healthText, 10, 35, 20, rl.Black)
-		if g.Player.Class.Type == gamedata.ClassTypeCaster {
-			rl.DrawText(manaText, 10, 60, 20, rl.Black)
-		}
-		rl.DrawText(levelText, 10, 85, 20, rl.Black)
-
-		if g.LevelUpMenu {
-			rl.DrawRectangle(WindowWidth/2-200, WindowHeight/2-150, 400, 300, rl.NewColor(0, 0, 0, 200))
-			rl.DrawText("Level Up! Allocate Stat Points", WindowWidth/2-180, WindowHeight/2-120, 24, rl.White)
-			rl.DrawText(fmt.Sprintf("Points: %d", g.Player.StatPoints), WindowWidth/2-180, WindowHeight/2-90, 20, rl.White)
-			stats := []string{"1: STR", "2: AGI", "3: VIT", "4: INT", "5: DEX", "6: LUK"}
-			statValues := []int{g.Player.Stats.STR, g.Player.Stats.AGI, g.Player.Stats.VIT, g.Player.Stats.INT, g.Player.Stats.DEX, g.Player.Stats.LUK}
-			for i, stat := range stats {
-				text := fmt.Sprintf("%s: %d", stat, statValues[i])
-				rl.DrawText(text, WindowWidth/2-180, WindowHeight/2-60+int32(i*25), 18, rl.White)
-			}
-		}
-	} else if g.State == RunStateMenu {
-		rl.DrawText("Single Fantasy", WindowWidth/2-100, WindowHeight/2-100, 40, rl.Black)
-		classNames := []string{"Warrior (1)", "Ranger (2)", "Mage (3)"}
-		for i, name := range classNames {
-			color := rl.Black
-			if int(g.SelectedClass) == i {
-				color = rl.Blue
-			}
-			rl.DrawText(name, WindowWidth/2-80, WindowHeight/2-40+int32(i*30), 20, color)
-		}
-		rl.DrawText("Press SPACE to start", WindowWidth/2-120, WindowHeight/2+60, 20, rl.Black)
-	} else if g.State == RunStateRewardSelection {
-		rl.DrawRectangle(WindowWidth/2-300, WindowHeight/2-200, 600, 400, rl.NewColor(0, 0, 0, 220))
-		rl.DrawText("Select a Reward", WindowWidth/2-100, WindowHeight/2-180, 30, rl.White)
-
-		for i, item := range g.RewardOptions {
-			if item == nil {
-				continue
-			}
-
-			y := WindowHeight/2 - 120 + int32(i*100)
-			color := rl.White
-			if g.SelectedReward == i {
-				color = rl.Yellow
-				rl.DrawRectangle(WindowWidth/2-290, y-5, 580, 90, rl.NewColor(255, 255, 0, 50))
-			}
-
-			rl.DrawText(fmt.Sprintf("%d: %s", i+1, item.Name), WindowWidth/2-280, y, 24, color)
-			rl.DrawText(item.Description, WindowWidth/2-280, y+30, 18, rl.Gray)
-
-			bonusText := "Bonuses: "
-			first := true
-			for statType, bonus := range item.StatBonuses {
-				if !first {
-					bonusText += ", "
-				}
-				statName := ""
-				switch statType {
-				case gamedata.StatTypeSTR:
-					statName = "STR"
-				case gamedata.StatTypeAGI:
-					statName = "AGI"
-				case gamedata.StatTypeVIT:
-					statName = "VIT"
-				case gamedata.StatTypeINT:
-					statName = "INT"
-				case gamedata.StatTypeDEX:
-					statName = "DEX"
-				case gamedata.StatTypeLUK:
-					statName = "LUK"
-				}
-				bonusText += fmt.Sprintf("%s +%d", statName, bonus)
-				first = false
-			}
-			rl.DrawText(bonusText, WindowWidth/2-280, y+55, 16, rl.LightGray)
-		}
-
-		rl.DrawText("Press ENTER to select, 1-3 to choose", WindowWidth/2-180, WindowHeight/2+180, 18, rl.White)
-	} else if g.State == RunStateVictory {
-		rl.DrawText("Victory!", WindowWidth/2-60, WindowHeight/2-20, 40, rl.Green)
-		rl.DrawText("Press SPACE to restart", WindowWidth/2-120, WindowHeight/2+30, 20, rl.Black)
-	} else if g.State == RunStateDefeat {
-		rl.DrawText("Defeat!", WindowWidth/2-60, WindowHeight/2-20, 40, rl.Red)
-		rl.DrawText("Press SPACE to restart", WindowWidth/2-120, WindowHeight/2+30, 20, rl.Black)
+	if g.DebugOverlayEnabled {
+		systems.DrawDebugOverlay(g.GetDebugLines())
 	}
 
 	rl.EndDrawing()
 }
 
-func (g *Game) HandleMenuInput() {
-	if rl.IsKeyPressed(rl.KeyOne) {
-		g.SelectedClass = gamedata.ClassTypeMelee
+func (g *Game) drawBootScreen() {
+	rl.DrawText("Booting...", WindowWidth/2-80, WindowHeight/2-20, 40, rl.Black)
+}
+
+func (g *Game) drawMainMenu() {
+	rl.DrawText("Single Fantasy", WindowWidth/2-140, WindowHeight/2-120, 48, rl.Black)
+	rl.DrawText("Press ENTER or SPACE to Start", WindowWidth/2-170, WindowHeight/2-20, 24, rl.DarkGray)
+	rl.DrawText("F3 toggles debug overlay", WindowWidth/2-130, WindowHeight/2+20, 20, rl.Gray)
+}
+
+func (g *Game) drawClassSelect() {
+	rl.DrawText("Select Class", WindowWidth/2-110, WindowHeight/2-140, 40, rl.Black)
+	classNames := []string{"1) Warrior", "2) Ranger", "3) Mage"}
+	for i, name := range classNames {
+		color := rl.Black
+		if int(g.SelectedClass) == i {
+			color = rl.Blue
+		}
+		rl.DrawText(name, WindowWidth/2-80, WindowHeight/2-60+int32(i*35), 26, color)
 	}
-	if rl.IsKeyPressed(rl.KeyTwo) {
-		g.SelectedClass = gamedata.ClassTypeRanged
+	rl.DrawText("Press ENTER or SPACE to Confirm", WindowWidth/2-180, WindowHeight/2+90, 22, rl.DarkGray)
+}
+
+func (g *Game) drawRun() {
+	if g.Dungeon != nil {
+		for _, room := range g.Dungeon.Rooms {
+			systems.DrawRoom(room.X, room.Y, room.Width, room.Height, room.IsBoss(), g.Camera)
+		}
 	}
-	if rl.IsKeyPressed(rl.KeyThree) {
-		g.SelectedClass = gamedata.ClassTypeCaster
+
+	for _, proj := range g.Projectiles {
+		if proj.Alive {
+			systems.DrawProjectile(proj.X, proj.Y, proj.Radius, g.Camera)
+		}
 	}
-	if rl.IsKeyPressed(rl.KeySpace) {
-		g.StartRun()
+
+	for _, enemy := range g.Enemies {
+		systems.DrawEnemy(enemy, g.Camera)
+	}
+
+	if g.Boss != nil {
+		systems.DrawBoss(g.Boss, g.Camera)
+		for _, proj := range g.Boss.Projectiles {
+			if proj.Alive {
+				systems.DrawBossProjectile(proj.X, proj.Y, proj.Radius, g.Camera)
+			}
+		}
+	}
+
+	if g.Player != nil {
+		systems.DrawPlayer(g.Player, g.Camera)
+		systems.DrawSkillBar(g.Player)
+	}
+
+	if g.Player == nil || g.Dungeon == nil {
+		return
+	}
+
+	roomText := fmt.Sprintf("Room: %d/%d", g.Dungeon.CurrentRoom+1, len(g.Dungeon.Rooms))
+	healthText := fmt.Sprintf("Health: %d/%d", g.Player.Health, g.Player.MaxHealth)
+	manaText := fmt.Sprintf("Mana: %d/%d", g.Player.Mana, g.Player.MaxMana)
+	levelText := fmt.Sprintf("Level: %d | XP: %d/%d", g.Player.Level, g.Player.XP, g.Player.XPToNext)
+	rl.DrawText(roomText, 10, 40, 20, rl.Black)
+	rl.DrawText(healthText, 10, 65, 20, rl.Black)
+	if g.Player.Class.Type == gamedata.ClassTypeCaster {
+		rl.DrawText(manaText, 10, 90, 20, rl.Black)
+	}
+	rl.DrawText(levelText, 10, 115, 20, rl.Black)
+
+	if g.LevelUpMenu {
+		rl.DrawRectangle(WindowWidth/2-200, WindowHeight/2-150, 400, 300, rl.NewColor(0, 0, 0, 200))
+		rl.DrawText("Level Up! Allocate Stat Points", WindowWidth/2-180, WindowHeight/2-120, 24, rl.White)
+		rl.DrawText(fmt.Sprintf("Points: %d", g.Player.StatPoints), WindowWidth/2-180, WindowHeight/2-90, 20, rl.White)
+		stats := []string{"1: STR", "2: AGI", "3: VIT", "4: INT", "5: DEX", "6: LUK"}
+		statValues := []int{g.Player.Stats.STR, g.Player.Stats.AGI, g.Player.Stats.VIT, g.Player.Stats.INT, g.Player.Stats.DEX, g.Player.Stats.LUK}
+		for i, stat := range stats {
+			text := fmt.Sprintf("%s: %d", stat, statValues[i])
+			rl.DrawText(text, WindowWidth/2-180, WindowHeight/2-60+int32(i*25), 18, rl.White)
+		}
 	}
 }
 
-func (g *Game) HandleGameOverInput() {
-	if rl.IsKeyPressed(rl.KeySpace) {
-		g.State = RunStateMenu
-		g.ResetState()
+func (g *Game) drawRewardSelection() {
+	rl.DrawRectangle(WindowWidth/2-300, WindowHeight/2-200, 600, 400, rl.NewColor(0, 0, 0, 220))
+	rl.DrawText("Select a Reward", WindowWidth/2-100, WindowHeight/2-180, 30, rl.White)
+
+	for i, item := range g.RewardOptions {
+		if item == nil {
+			continue
+		}
+
+		y := WindowHeight/2 - 120 + int32(i*100)
+		color := rl.White
+		if g.SelectedReward == i {
+			color = rl.Yellow
+			rl.DrawRectangle(WindowWidth/2-290, y-5, 580, 90, rl.NewColor(255, 255, 0, 50))
+		}
+
+		rl.DrawText(fmt.Sprintf("%d: %s", i+1, item.Name), WindowWidth/2-280, y, 24, color)
+		rl.DrawText(item.Description, WindowWidth/2-280, y+30, 18, rl.Gray)
+
+		bonusText := "Bonuses: "
+		first := true
+		for statType, bonus := range item.StatBonuses {
+			if !first {
+				bonusText += ", "
+			}
+			statName := ""
+			switch statType {
+			case gamedata.StatTypeSTR:
+				statName = "STR"
+			case gamedata.StatTypeAGI:
+				statName = "AGI"
+			case gamedata.StatTypeVIT:
+				statName = "VIT"
+			case gamedata.StatTypeINT:
+				statName = "INT"
+			case gamedata.StatTypeDEX:
+				statName = "DEX"
+			case gamedata.StatTypeLUK:
+				statName = "LUK"
+			}
+			bonusText += fmt.Sprintf("%s +%d", statName, bonus)
+			first = false
+		}
+		rl.DrawText(bonusText, WindowWidth/2-280, y+55, 16, rl.LightGray)
 	}
+
+	rl.DrawText("Press ENTER to confirm, 1-3 to choose", WindowWidth/2-190, WindowHeight/2+180, 18, rl.White)
+}
+
+func (g *Game) drawResults() {
+	title := "Run Complete"
+	titleColor := rl.DarkGray
+	if g.Results.Victory {
+		title = "Victory!"
+		titleColor = rl.Green
+	} else {
+		title = "Defeat!"
+		titleColor = rl.Red
+	}
+
+	rl.DrawText(title, WindowWidth/2-90, WindowHeight/2-180, 48, titleColor)
+
+	className := "Warrior"
+	switch g.Results.SelectedClass {
+	case gamedata.ClassTypeRanged:
+		className = "Ranger"
+	case gamedata.ClassTypeCaster:
+		className = "Mage"
+	}
+
+	rl.DrawText(fmt.Sprintf("Class: %s", className), WindowWidth/2-150, WindowHeight/2-90, 26, rl.Black)
+	rl.DrawText(fmt.Sprintf("Rooms Cleared: %d/%d", g.Results.RoomsCleared, g.Results.TotalRooms), WindowWidth/2-150, WindowHeight/2-55, 26, rl.Black)
+	rl.DrawText(fmt.Sprintf("Run Time: %.1fs", g.Results.RunDurationSeconds), WindowWidth/2-150, WindowHeight/2-20, 26, rl.Black)
+	rl.DrawText(fmt.Sprintf("Reward Picked: %s", g.Results.RewardPicked), WindowWidth/2-150, WindowHeight/2+15, 26, rl.Black)
+	rl.DrawText("Press ENTER or SPACE to return to Main Menu", WindowWidth/2-230, WindowHeight/2+90, 24, rl.DarkGray)
+}
+
+func (g *Game) GetStateName() string {
+	switch g.State {
+	case StateBoot:
+		return "Boot"
+	case StateMainMenu:
+		return "MainMenu"
+	case StateClassSelect:
+		return "ClassSelect"
+	case StateRun:
+		return "Run"
+	case StateReward:
+		return "Reward"
+	case StateResults:
+		return "Results"
+	default:
+		return "Unknown"
+	}
+}
+
+func (g *Game) GetDebugLines() []string {
+	lines := []string{
+		fmt.Sprintf("FPS: %d", rl.GetFPS()),
+		fmt.Sprintf("State: %s", g.GetStateName()),
+		fmt.Sprintf("Fixed updates/frame: %d", g.LastUpdateSteps),
+		fmt.Sprintf("Frame time (clamped): %.3f s", g.LastFrameTime),
+	}
+
+	if g.State == StateRun {
+		roomIndex := 0
+		totalRooms := 0
+		if g.Dungeon != nil {
+			roomIndex = g.Dungeon.CurrentRoom + 1
+			totalRooms = len(g.Dungeon.Rooms)
+		}
+
+		aliveEnemies := 0
+		for _, enemy := range g.Enemies {
+			if enemy.Alive {
+				aliveEnemies++
+			}
+		}
+
+		bossProjectiles := 0
+		if g.Boss != nil {
+			for _, proj := range g.Boss.Projectiles {
+				if proj.Alive {
+					bossProjectiles++
+				}
+			}
+		}
+
+		activeProjectiles := 0
+		for _, proj := range g.Projectiles {
+			if proj.Alive {
+				activeProjectiles++
+			}
+		}
+
+		lines = append(lines, fmt.Sprintf("Room: %d/%d", roomIndex, totalRooms))
+		lines = append(lines, fmt.Sprintf("Enemies (alive/total): %d/%d", aliveEnemies, len(g.Enemies)))
+		lines = append(lines, fmt.Sprintf("Projectiles (player/boss): %d/%d", activeProjectiles, bossProjectiles))
+	}
+
+	return lines
 }
 
 func (g *Game) GetPlayerMoveSpeed() float32 {
+	if g.Player == nil {
+		return 0
+	}
+
 	speed := g.Player.MoveSpeed
 
 	if gamedata.HasEffect(&g.Player.Effects, gamedata.EffectSlow) {
@@ -787,25 +1047,4 @@ func (g *Game) GetPlayerMoveSpeed() float32 {
 	}
 
 	return speed
-}
-
-func (g *Game) HandleRewardSelectionInput() {
-	if rl.IsKeyPressed(rl.KeyOne) {
-		g.SelectedReward = 0
-	}
-	if rl.IsKeyPressed(rl.KeyTwo) {
-		g.SelectedReward = 1
-	}
-	if rl.IsKeyPressed(rl.KeyThree) {
-		g.SelectedReward = 2
-	}
-	if rl.IsKeyPressed(rl.KeyEnter) {
-		if g.SelectedReward >= 0 && g.SelectedReward < len(g.RewardOptions) {
-			item := g.RewardOptions[g.SelectedReward]
-			if item != nil {
-				g.Player.EquipItem(item)
-			}
-		}
-		g.GenerateNewDungeon()
-	}
 }

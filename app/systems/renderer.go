@@ -3,8 +3,8 @@ package systems
 import (
 	"fmt"
 	"math"
-	"sync"
 
+	"singlefantasy/app/assets"
 	"singlefantasy/app/gamedata"
 	"singlefantasy/app/gameobjects"
 
@@ -12,10 +12,8 @@ import (
 )
 
 var (
-	spriteSheet     rl.Texture2D
-	spriteSheetOnce sync.Once
-	spriteWidth     = float32(72)
-	spriteHeight    = float32(72)
+	spriteWidth  = float32(72)
+	spriteHeight = float32(72)
 )
 
 var TerrainColorNormalRGBA = rl.NewColor(128, 128, 128, 255)
@@ -42,6 +40,10 @@ type uiSkillSlot struct {
 const (
 	CameraWidth  = 1600
 	CameraHeight = 900
+)
+
+const (
+	HumanoidSpriteSheetAssetKey = assets.TextureHumanoidSpriteSheet
 )
 
 func NewCamera() *Camera {
@@ -120,7 +122,7 @@ func DrawPlayer(player *gameobjects.Player, camera *Camera) {
 		tint = rl.Red
 	}
 
-	rl.DrawTexturePro(GetSpriteSheet(), sourceRect, destRect, rl.NewVector2(0, 0), 0, tint)
+	drawTextureOrRect(GetSpriteSheet(), sourceRect, destRect, tint, rl.Blue)
 
 	healthBarWidth := player.Width
 	healthBarHeight := float32(5)
@@ -157,7 +159,7 @@ func DrawEnemy(enemy *gameobjects.Enemy, camera *Camera) {
 		tint = rl.NewColor(255, 200, 0, 255)
 	}
 
-	rl.DrawTexturePro(GetSpriteSheet(), sourceRect, destRect, rl.NewVector2(0, 0), 0, tint)
+	drawTextureOrRect(GetSpriteSheet(), sourceRect, destRect, tint, rl.Red)
 
 	healthBarWidth := enemy.Width
 	healthBarHeight := float32(5)
@@ -215,7 +217,7 @@ func DrawBoss(boss *gameobjects.Boss, camera *Camera) {
 		rl.DrawCircleLines(int32(screenX+boss.Width/2), int32(screenY+boss.Height/2), 100, rl.Red)
 	}
 
-	rl.DrawTexturePro(GetSpriteSheet(), sourceRect, destRect, rl.NewVector2(0, 0), 0, tint)
+	drawTextureOrRect(GetSpriteSheet(), sourceRect, destRect, tint, rl.Purple)
 
 	healthBarWidth := boss.Width
 	healthBarHeight := float32(8)
@@ -244,21 +246,24 @@ func GetDistance(x1, y1, x2, y2 float32) float32 {
 	return float32(math.Sqrt(float64(dx*dx + dy*dy)))
 }
 
-func LoadSpriteSheet() {
-	spriteSheetOnce.Do(func() {
-		spriteSheet = rl.LoadTexture("resources/sprites/Basic Humanoid Sprites 4x.png")
-	})
-}
-
 func GetSpriteSheet() rl.Texture2D {
-	LoadSpriteSheet()
-	return spriteSheet
+	return assets.Get().GetTexture(HumanoidSpriteSheetAssetKey)
 }
 
 func getSpriteSourceRect(row, col int) rl.Rectangle {
 	x := float32(col) * spriteWidth
 	y := float32(row) * spriteHeight
 	return rl.NewRectangle(x, y, spriteWidth, spriteHeight)
+}
+
+func drawTextureOrRect(texture rl.Texture2D, sourceRect, destRect rl.Rectangle, tint rl.Color, fallbackColor rl.Color) {
+	if texture.ID != 0 {
+		rl.DrawTexturePro(texture, sourceRect, destRect, rl.NewVector2(0, 0), 0, tint)
+		return
+	}
+
+	rl.DrawRectangleRec(destRect, fallbackColor)
+	rl.DrawRectangleLinesEx(destRect, 1, rl.Black)
 }
 
 func DrawSkillBar(player *gameobjects.Player) {
@@ -354,5 +359,35 @@ func DrawSkillBar(player *gameobjects.Player) {
 				rl.DrawText(text, textX, textY, 18, rl.RayWhite)
 			}
 		}
+	}
+}
+
+func DrawDebugOverlay(lines []string) {
+	if len(lines) == 0 {
+		return
+	}
+
+	padding := int32(10)
+	lineHeight := int32(20)
+	maxWidth := int32(0)
+	for _, line := range lines {
+		width := int32(rl.MeasureText(line, 18))
+		if width > maxWidth {
+			maxWidth = width
+		}
+	}
+
+	panelWidth := maxWidth + padding*2
+	panelHeight := int32(len(lines))*lineHeight + padding*2
+	panelX := int32(10)
+	panelY := int32(10)
+
+	rl.DrawRectangle(panelX, panelY, panelWidth, panelHeight, rl.NewColor(0, 0, 0, 170))
+	rl.DrawRectangleLines(panelX, panelY, panelWidth, panelHeight, rl.NewColor(220, 220, 220, 220))
+
+	for i, line := range lines {
+		x := panelX + padding
+		y := panelY + padding + int32(i)*lineHeight
+		rl.DrawText(line, x, y, 18, rl.RayWhite)
 	}
 }
