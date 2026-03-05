@@ -216,7 +216,7 @@ func (s *projectilesSystem) updateBossProjectiles(g *Game, dt float32) {
 		playerCenterX, playerCenterY := g.Player.Center()
 		distance := systems.GetDistance(proj.X, proj.Y, playerCenterX, playerCenterY)
 		if distance <= proj.Radius+g.Player.Hitbox.Width/2 {
-			g.Player.TakeDamage(proj.Damage)
+			g.ApplyPlayerDirectHit(proj.Damage, proj.X, proj.Y)
 			proj.Alive = false
 		}
 
@@ -326,8 +326,8 @@ func (s *movementSystem) Update(ctx *RuntimeContext, dt float32) {
 
 	g.UpdateAutoAttack(dt)
 
-	moveDeltaX := float32(0)
-	moveDeltaY := float32(0)
+	desiredVelX := float32(0)
+	desiredVelY := float32(0)
 
 	if g.HasPlayerMoveTarget {
 		playerCenterX, playerCenterY := g.Player.Center()
@@ -335,18 +335,29 @@ func (s *movementSystem) Update(ctx *RuntimeContext, dt float32) {
 		dy := g.PlayerMoveTargetY - playerCenterY
 		distance := systems.GetDistance(0, 0, dx, dy)
 
-		if distance > 5 {
+		if distance > PlayerMoveTargetStopDistance {
 			moveSpeed := g.GetPlayerMoveSpeed()
-			moveDistance := moveSpeed * dt
-			if moveDistance > distance {
-				moveDistance = distance
+			if distance < PlayerMoveTargetSlowRadius {
+				moveSpeed *= distance / PlayerMoveTargetSlowRadius
 			}
-			moveDeltaX = (dx / distance) * moveDistance
-			moveDeltaY = (dy / distance) * moveDistance
+			desiredVelX = (dx / distance) * moveSpeed
+			desiredVelY = (dy / distance) * moveSpeed
 		} else {
 			g.HasPlayerMoveTarget = false
 		}
 	}
+
+	g.Player.MoveVelocityX = smoothAxisVelocity(g.Player.MoveVelocityX, desiredVelX, PlayerMoveAcceleration, PlayerMoveDeceleration, dt)
+	g.Player.MoveVelocityY = smoothAxisVelocity(g.Player.MoveVelocityY, desiredVelY, PlayerMoveAcceleration, PlayerMoveDeceleration, dt)
+	g.Player.KnockbackVelX = decayAxisVelocity(g.Player.KnockbackVelX, PlayerKnockbackDecayPerSecond, dt)
+	g.Player.KnockbackVelY = decayAxisVelocity(g.Player.KnockbackVelY, PlayerKnockbackDecayPerSecond, dt)
+
+	totalVelX := g.Player.MoveVelocityX + g.Player.KnockbackVelX
+	totalVelY := g.Player.MoveVelocityY + g.Player.KnockbackVelY
+	s.updatePlayerFacing(g, totalVelX)
+
+	moveDeltaX := totalVelX * dt
+	moveDeltaY := totalVelY * dt
 
 	if g.CurrentRoom == nil {
 		g.Player.PosX += moveDeltaX
@@ -354,17 +365,51 @@ func (s *movementSystem) Update(ctx *RuntimeContext, dt float32) {
 		return
 	}
 
+	startX := g.Player.PosX
+	startY := g.Player.PosY
 	newX, newY := systems.ResolvePlayerMovement(
-		g.Player.PosX,
-		g.Player.PosY,
+		startX,
+		startY,
 		g.Player.Hitbox.Width,
 		g.Player.Hitbox.Height,
 		moveDeltaX,
 		moveDeltaY,
 		g.CurrentRoom,
 	)
+
+	appliedDeltaX := newX - startX
+	appliedDeltaY := newY - startY
+	g.Player.MoveVelocityX, g.Player.KnockbackVelX = dampBlockedAxis(g.Player.MoveVelocityX, g.Player.KnockbackVelX, moveDeltaX, appliedDeltaX)
+	g.Player.MoveVelocityY, g.Player.KnockbackVelY = dampBlockedAxis(g.Player.MoveVelocityY, g.Player.KnockbackVelY, moveDeltaY, appliedDeltaY)
+
 	g.Player.PosX = newX
 	g.Player.PosY = newY
+}
+
+func (s *movementSystem) updatePlayerFacing(g *Game, horizontalVelocity float32) {
+	if horizontalVelocity > PlayerFacingDeadzone {
+		g.Player.FacingRight = true
+		return
+	}
+	if horizontalVelocity < -PlayerFacingDeadzone {
+		g.Player.FacingRight = false
+		return
+	}
+
+	valid, targetX, _, targetWidth, _ := g.getPlayerAttackTargetBounds()
+	if !valid {
+		return
+	}
+
+	playerCenterX, _ := g.Player.Center()
+	targetCenterX := targetX + targetWidth/2
+	dx := targetCenterX - playerCenterX
+	if dx > PlayerFacingDeadzone {
+		g.Player.FacingRight = true
+	}
+	if dx < -PlayerFacingDeadzone {
+		g.Player.FacingRight = false
+	}
 }
 
 type combatResolveSystem struct{}
@@ -378,11 +423,17 @@ func (s *combatResolveSystem) Update(ctx *RuntimeContext, _ float32) {
 	}
 
 	for _, enemy := range g.Enemies {
-		enemy.Attack(g.Player)
+		hit, damage, sourceX, sourceY := enemy.Attack()
+		if hit {
+			g.ApplyPlayerDirectHit(damage, sourceX, sourceY)
+		}
 	}
 
 	if g.Boss != nil {
-		g.Boss.Attack(g.Player)
+		hit, damage, sourceX, sourceY := g.Boss.Attack()
+		if hit {
+			g.ApplyPlayerDirectHit(damage, sourceX, sourceY)
+		}
 	}
 }
 

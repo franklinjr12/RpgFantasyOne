@@ -116,6 +116,10 @@ func DrawPlayer(player *gameobjects.Player, camera *Camera) {
 	}
 
 	destRect := rl.NewRectangle(screenX, screenY, player.Hitbox.Width, player.Hitbox.Height)
+	if !player.FacingRight {
+		sourceRect.X += sourceRect.Width
+		sourceRect.Width = -sourceRect.Width
+	}
 
 	tint := rl.White
 	if player.HitFlashTimer > 0 {

@@ -1,169 +1,75 @@
-﻿# Step 2 Refinement: Isometric World and Camera
+# Step 3 Refinement: Player Controller and Feel
 
-Source backlog step: `2) Isometric World & Camera` from `guidelines/backlog.md`.
+## Goal
+Refine backlog step `3) Player Controller & Feel` into implementation-ready tasks that improve control readability and combat feel while preserving current run flow and class behavior.
 
-## Objective
-Implement a usable isometric presentation layer for the run state while keeping gameplay logic in world-space and preserving current room progression/combat behavior. Deliver camera smoothing, depth-correct rendering, room wall and obstacle AABB collision, and placeholder floor/door visuals with a basic door transition flow.
+## Scope Guardrails
+- Keep Windows + raylib-go assumptions.
+- Keep runtime update order in `app/game/runtime_pipeline.go`.
+- Preserve room progression, XP gain, reward flow, and boss handling.
+- Keep right click move and left click target attack controls.
+- Do not start broad skill-system refactors in this step.
 
-## Scope Constraints
-- Keep Windows and `raylib-go` compatibility.
-- Keep the runtime pipeline order unchanged.
-- Keep existing core loop behavior (run -> rooms -> boss -> reward -> results).
-- Do not expand into Step 3 movement feel tuning (acceleration/facing polish) beyond what is required for collision correctness.
-- Use placeholders (flat colors/shapes) for floor, obstacles, and door visuals.
+## Current State Snapshot (from code)
+- Right click movement with click-to-move target exists in `inputSystem` + `movementSystem`.
+- Player movement is instant speed (no acceleration curve), with collision handled by `systems.ResolvePlayerMovement`.
+- Enemy has facing state, but player facing + sprite flip is not implemented.
+- Auto attack exists per class in `Game.UpdateAutoAttack`, but damage/projectile is applied immediately when cooldown is ready.
+- Player hit flash exists, but player iframes and knockback are not implemented.
 
-## Current State Snapshot (Code Reality)
-- Rendering is top-down world-to-screen translation, not isometric projection (`app/systems/renderer.go`).
-- `IsometricToScreen` and `ScreenToIsometric` exist but are not integrated into render/input flow.
-- Camera snaps directly to player without smoothing (`systems.UpdateCamera`), clamped to world bounds.
-- Player movement collision is only room-edge clamping in `movementSystem.Update` (`app/game/runtime_pipeline.go`).
-- No room obstacle or door data model in `app/world/room.go`.
-- Room transition is immediate on clear via `CheckRoomCompletion` + `AdvanceToNextRoom`, not door-driven.
+## Implementation Backlog
+- [x] 3.1 Add controller/feel tuning constants in `app/game/config.go`.
+- [x] 3.2 Define player feel state in `app/gameobjects/player.go`:
+  Add fields for facing, movement velocity smoothing, attack timing state, hurt iframe timer, and knockback velocity.
+- [x] 3.3 Refactor `movementSystem.Update` in `app/game/runtime_pipeline.go` to use light acceleration/deceleration:
+  Keep click-to-move target logic, apply acceleration toward desired velocity, apply deceleration near stop, and keep collision resolution.
+- [x] 3.4 Ensure movement state and collision stay coherent:
+  When collision blocks one axis, clear or damp that velocity axis to prevent jitter/sticking on walls and obstacles.
+- [x] 3.5 Implement player facing updates:
+  Update facing from movement and attack target direction in runtime systems so facing remains stable when idle.
+- [x] 3.6 Implement sprite flip for player in `app/systems/renderer.go`:
+  Keep same spritesheet rows/cols, flip horizontally when facing left, no asset changes.
+- [x] 3.7 Introduce basic attack hit timing state machine in `app/game/game.go` and/or runtime systems:
+  Start attack, wait windup, apply hit at hit frame, then recover/cooldown. Keep existing class-specific damage rules and XP/lifesteal outcomes.
+- [x] 3.8 Preserve current class attack identity with timing:
+  Melee hit at contact timing, ranged/caster spawn projectile or cast at hit frame (not immediately on click).
+- [x] 3.9 Add player hurt iframes in `app/gameobjects/player.go`:
+  Direct hits during active iframe should not re-apply normal hit damage.
+- [x] 3.10 Add light readable knockback on player hit:
+  Apply short knockback impulse from attacker/projectile direction and decay over time in movement update.
+- [x] 3.11 Keep hit feedback readable:
+  Retain hit flash and tune timer values so hit, iframe window, and knockback do not feel invulnerable or floaty.
+- [x] 3.12 Add focused tests for feel logic:
+  Unit tests for movement smoothing helper(s), iframe damage gating, and knockback decay/collision interaction where practical.
+- [x] 3.13 Run validation commands and resolve regressions:
+  `go test ./...` and `go build -o .\output\app.exe .\app`.
 
-## Refined Task Backlog
+## Suggested Task Order for Implementation Agent
+- [x] A. Movement foundation first: `3.1` to `3.4`.
+- [x] B. Facing and rendering: `3.5` to `3.6`.
+- [x] C. Attack timing and class behavior parity: `3.7` to `3.8`.
+- [x] D. Hurt response and feedback: `3.9` to `3.11`.
+- [x] E. Tests and final validation: `3.12` to `3.13`.
 
-### [x] T2.1 Add a shared isometric projection layer used by render and input
-Goal: one authoritative conversion path between world-space and screen-space.
+## Acceptance Criteria
+- [ ] Right click movement feels smoother than instant start/stop and still respects room/obstacle collision.
+- [ ] Player sprite flips correctly left/right and does not flicker when nearly stationary.
+- [ ] Left click basic attacks have visible hit timing (windup -> hit -> recover), not instant application.
+- [ ] Melee/ranged/caster basic attacks still work with the same core class intent and progression rewards.
+- [ ] Consecutive enemy hits are gated by short iframes; player still takes damage when iframe expires.
+- [ ] Knockback is visible but small, does not break room progression, and resolves safely with collision.
+- [ ] No regressions in room transitions, boss flow, level up menu gating, or reward entry.
 
-Implementation:
-- Add/normalize helpers in `app/systems/renderer.go` or a new focused file (example: `app/systems/projection.go`):
-  - `WorldToScreenIso(worldX, worldY, camera)`
-  - `ScreenToWorldIso(screenX, screenY, camera)`
-  - optional helper for projected depth key (Y-sort basis).
-- Keep gameplay simulation in world coordinates; only view/input mapping changes.
-- Replace direct usage of current top-down transforms in:
-  - `app/systems/input.go`
-  - `app/game/runtime_pipeline.go` (attack target pick)
-  - `app/game/skills_handler.go` (cursor targeting)
-  - draw paths in `app/systems/renderer.go`
+## Manual Smoke Checklist
+- [ ] Start each class and verify right click movement response in open space and near obstacles.
+- [ ] Verify player sprite orientation while moving, attacking, and idle.
+- [ ] Click an enemy at max range and confirm chase -> timed attack -> damage application.
+- [ ] Stand in enemy melee range and verify iframe behavior prevents rapid multi-hit spikes.
+- [ ] Verify knockback does not push player out of room bounds or through obstacles.
+- [ ] Clear a normal room, transition through door, and complete boss room to reward screen.
 
-Acceptance criteria:
-- Right-click move and left-click target selection still work after projection switch.
-- Skill targeting still aligns with cursor position in run state.
-- No duplicate conversion math outside the shared helpers.
-
-### [x] T2.2 Implement consistent depth sorting for world objects
-Goal: prevent incorrect overlap when entities cross in isometric view.
-
-Implementation:
-- Build a render queue for run-world drawables (player, enemies, boss, projectiles, optional obstacle overlays).
-- Sort by a stable depth key derived from world position (typically world Y plus optional tie-breaker on X or entity id).
-- Keep UI/HUD drawing after world queue.
-- Update `Game.drawRun()` (`app/game/game.go`) to use the sorted draw path.
-
-Acceptance criteria:
-- Player/enemy/boss overlap order changes correctly when moving up/down the map.
-- Sorting is stable (no frame-to-frame flicker when depth is equal).
-
-### [x] T2.3 Upgrade camera follow to smoothed motion with safe clamping
-Goal: camera follows player with small smoothing instead of hard snap.
-
-Implementation:
-- Extend camera state (`app/systems/renderer.go`): smoothing factor and optional velocity/target fields.
-- Update `systems.UpdateCamera(...)` to interpolate toward target each fixed update.
-- Keep clamping so camera does not expose outside playable world bounds.
-- Ensure compatibility with isometric projection math introduced in T2.1.
-
-Acceptance criteria:
-- Camera visibly lags slightly and catches up smoothly.
-- No jitter when player is idle.
-- Camera remains bounded across full dungeon length.
-
-### [x] T2.4 Add room obstacle and door data structures in world model
-Goal: define collision/transition primitives at room level.
-
-Implementation:
-- Add simple AABB types for world geometry in `app/world/room.go` (or `app/world/collision.go`):
-  - obstacle rectangle list per room
-  - door rectangle list per room with minimal state (`locked/open`, target room index or direction).
-- Generate placeholder obstacles/doors when creating rooms (`NewRoom` / `NewDungeon`).
-- Ensure obstacle placement does not block room spawn center and is within room bounds.
-
-Acceptance criteria:
-- Each non-boss room has at least one door definition for progression.
-- Obstacles are deterministic enough for testing and never outside room bounds.
-
-### [x] T2.5 Implement AABB collision resolution for player vs room walls/obstacles
-Goal: replace simple edge clamp with collision-resolved movement constraints.
-
-Implementation:
-- Add collision helpers in `app/systems` (example: `collision.go`):
-  - AABB overlap check
-  - movement resolution against room bounds and obstacle list.
-- Integrate into `movementSystem.Update` in `app/game/runtime_pipeline.go`.
-- Keep current click-to-move flow; adjust final position only through collision resolution.
-
-Acceptance criteria:
-- Player cannot leave room bounds.
-- Player cannot pass through obstacles.
-- Movement remains smooth while sliding around obstacle edges.
-
-### [x] T2.6 Render basic isometric floor/room/obstacle placeholders
-Goal: make rooms read as isometric spaces with minimal art.
-
-Implementation:
-- Update room drawing in `app/systems/renderer.go`:
-  - render floor as isometric-projected shapes/tiles (flat color placeholders).
-  - render room border/walls in a readable way.
-  - render obstacle placeholders from room obstacle data.
-- Keep boss-room visual distinction with alternate colors.
-
-Acceptance criteria:
-- Room floor, walls, and obstacles are visible and readable in isometric view.
-- Visuals remain performant and deterministic under current room count.
-
-### [x] T2.7 Add placeholder door visuals and transition trigger
-Goal: support basic door transitions tied to room progression.
-
-Implementation:
-- Render door placeholders (locked vs open state) in `app/systems/renderer.go`.
-- In run logic (`app/game/runtime_pipeline.go` and/or `app/game/game.go`):
-  - lock doors while room objective is incomplete.
-  - once room is cleared, allow transition when player enters door AABB.
-  - transition to next room and reposition player at entry point.
-- Add a minimal transition effect (short fade or short lockout timer) using placeholder visuals.
-
-Acceptance criteria:
-- Room does not advance before clear.
-- After clear, entering door transitions once (no double-trigger).
-- Boss room flow still reaches reward state correctly.
-
-### [x] T2.8 Add focused automated tests for projection and collision primitives
-Goal: protect new math and collision logic from regressions.
-
-Implementation:
-- Add tests in `app/systems` and `app/world` for pure logic:
-  - projection round-trip tolerance (`world -> screen -> world`).
-  - depth sort ordering helper behavior.
-  - AABB collision resolution against bounds/obstacles.
-  - room obstacle/door generation invariants.
-- Keep tests independent from raylib runtime where possible.
-
-Acceptance criteria:
-- `go test ./...` passes.
-- New tests fail if projection/collision helpers regress.
-
-## Suggested Execution Order
-1. T2.1
-2. T2.3
-3. T2.4
-4. T2.5
-5. T2.6
-6. T2.2
-7. T2.7
-8. T2.8
-
-## Verification Checklist (End of Step)
-- `go test ./...`
-- `go build -o .\\output\\app.exe .\\app`
-- Manual smoke in run state:
-  - click-to-move reaches intended world positions under isometric projection.
-  - camera smoothly follows player.
-  - collision blocks room edges and obstacles.
-  - depth ordering is visually correct when entities overlap.
-  - doors lock until clear and transition correctly after clear.
-
-## Out of Scope for This Step
-- Full movement feel tuning (acceleration/facing polish), except collision correctness.
-- Minimap door UX and advanced transition polish (handled in later backlog steps).
-- Final art assets, VFX polish, or audio pass.
+## Out of Scope for Step 3
+- [ ] Full animation system or animation blending.
+- [ ] New enemy archetypes or AI state machine redesign.
+- [ ] Skill/effect architecture migration beyond what is required for basic attack timing.
+- [ ] UI redesign outside required hit feedback readability.

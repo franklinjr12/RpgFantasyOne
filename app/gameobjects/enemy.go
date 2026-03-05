@@ -123,14 +123,14 @@ func (e *Enemy) Update(deltaTime float32, playerX, playerY float32) {
 	}
 }
 
-func (e *Enemy) Attack(player *Player) bool {
+func (e *Enemy) Attack() (bool, int, float32, float32) {
 	if e.CurrentCooldown <= 0 && e.State == EnemyStateAttacking {
-		player.TakeDamage(e.Damage)
 		e.AttackFlashTimer = 0.15
 		e.CurrentCooldown = e.AttackCooldown
-		return true
+		sourceX, sourceY := e.Center()
+		return true, e.Damage, sourceX, sourceY
 	}
-	return false
+	return false, 0, 0, 0
 }
 
 func (e *Enemy) TakeDamage(damage int) {

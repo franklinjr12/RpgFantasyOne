@@ -22,10 +22,10 @@
 ---
 
 ## 2) Isometric World & Camera
-- [ ] Isometric coordinate handling (grid/world to screen projection) + consistent depth sorting
-- [ ] Camera that follows player with small smoothing
-- [ ] Room bounds + collision with walls/obstacles (simple AABB)
-- [ ] Basic floor/room visuals (tile/flat textures) + door transitions (use placeholders for the textures as flat colorored rectangles for now)
+- [x] Isometric coordinate handling (grid/world to screen projection) + consistent depth sorting
+- [x] Camera that follows player with small smoothing
+- [x] Room bounds + collision with walls/obstacles (simple AABB)
+- [x] Basic floor/room visuals (tile/flat textures) + door transitions (use placeholders for the textures as flat colorored rectangles for now)
 
 ---
 

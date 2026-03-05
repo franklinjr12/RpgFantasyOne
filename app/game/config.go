@@ -53,6 +53,29 @@ const (
 	EnemiesPerRoomMax = 5
 )
 
+const (
+	PlayerMoveTargetStopDistance      float32 = 6
+	PlayerMoveTargetSlowRadius        float32 = 48
+	PlayerMoveAcceleration            float32 = 1600
+	PlayerMoveDeceleration            float32 = 1900
+	PlayerFacingDeadzone              float32 = 8
+	PlayerVelocitySnapThreshold       float32 = 0.5
+	PlayerCollisionBlockedRatio       float32 = 0.5
+	PlayerBlockedAxisKnockbackDamping float32 = 0.2
+	PlayerKnockbackImpulse            float32 = 110
+	PlayerKnockbackDecayPerSecond     float32 = 520
+	PlayerHitFlashDuration            float32 = 0.12
+	PlayerHurtIFrameDuration          float32 = 0.22
+	MeleeAttackWindup                 float32 = 0.12
+	MeleeAttackRecover                float32 = 0.1
+	RangedAttackWindup                float32 = 0.08
+	RangedAttackRecover               float32 = 0.06
+	CasterAttackWindup                float32 = 0.1
+	CasterAttackRecover               float32 = 0.08
+	MeleeAttackHitRangeBuffer         float32 = 8
+	AutoAttackProjectileSpeed         float32 = 400
+)
+
 var TerrainColorNormalRGBA = rl.NewColor(128, 128, 128, 255)
 var TerrainColorBossRGBA = rl.NewColor(64, 64, 64, 255)
 var PlayerColorRGBA = rl.NewColor(0, 0, 255, 255)

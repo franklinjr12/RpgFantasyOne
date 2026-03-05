@@ -1,8 +1,17 @@
 package gameobjects
 
 import (
+	"math"
 	"singlefantasy/app/core"
 	"singlefantasy/app/gamedata"
+)
+
+type PlayerAttackState int
+
+const (
+	PlayerAttackStateIdle PlayerAttackState = iota
+	PlayerAttackStateWindup
+	PlayerAttackStateRecover
 )
 
 type Player struct {
@@ -24,6 +33,14 @@ type Player struct {
 	Equipment             map[gamedata.ItemSlot]*gamedata.Item
 	AttackCooldown        float32
 	CurrentAttackCooldown float32
+	FacingRight           bool
+	MoveVelocityX         float32
+	MoveVelocityY         float32
+	AttackState           PlayerAttackState
+	AttackStateTimer      float32
+	HurtIFrameTimer       float32
+	KnockbackVelX         float32
+	KnockbackVelY         float32
 }
 
 func NewPlayer(x, y float32, classType gamedata.ClassType) *Player {
@@ -55,6 +72,14 @@ func NewPlayer(x, y float32, classType gamedata.ClassType) *Player {
 		Equipment:             make(map[gamedata.ItemSlot]*gamedata.Item),
 		AttackCooldown:        1.0,
 		CurrentAttackCooldown: 0,
+		FacingRight:           true,
+		MoveVelocityX:         0,
+		MoveVelocityY:         0,
+		AttackState:           PlayerAttackStateIdle,
+		AttackStateTimer:      0,
+		HurtIFrameTimer:       0,
+		KnockbackVelX:         0,
+		KnockbackVelY:         0,
 	}
 
 	player.ApplyStats()
@@ -115,6 +140,13 @@ func (p *Player) Update(deltaTime float32) {
 		}
 	}
 
+	if p.HurtIFrameTimer > 0 {
+		p.HurtIFrameTimer -= deltaTime
+		if p.HurtIFrameTimer < 0 {
+			p.HurtIFrameTimer = 0
+		}
+	}
+
 	for _, skill := range p.Skills {
 		skill.Update(deltaTime)
 	}
@@ -130,6 +162,14 @@ func (p *Player) Update(deltaTime float32) {
 }
 
 func (p *Player) TakeDamage(damage int) {
+	p.takeDamageInternal(damage, true)
+}
+
+func (p *Player) TakeDamageWithoutFlash(damage int) {
+	p.takeDamageInternal(damage, false)
+}
+
+func (p *Player) takeDamageInternal(damage int, flash bool) {
 	if gamedata.HasEffect(&p.Entity.Effects, gamedata.EffectDamageReduction) {
 		magnitude := gamedata.GetEffectMagnitude(&p.Entity.Effects, gamedata.EffectDamageReduction)
 		damage = int(float32(damage) * (1.0 - magnitude))
@@ -147,7 +187,37 @@ func (p *Player) TakeDamage(damage int) {
 	}
 
 	p.Entity.ApplyDamage(damage)
-	p.HitFlashTimer = 0.2
+	if flash {
+		p.HitFlashTimer = 0.2
+	}
+}
+
+func (p *Player) CanTakeDirectHit() bool {
+	return p.HurtIFrameTimer <= 0
+}
+
+func (p *Player) StartHurtIFrames(duration float32) {
+	if duration <= 0 {
+		return
+	}
+	p.HurtIFrameTimer = duration
+}
+
+func (p *Player) ApplyKnockbackFrom(sourceX, sourceY, impulse float32) {
+	if impulse <= 0 {
+		return
+	}
+
+	centerX, centerY := p.Center()
+	dx := centerX - sourceX
+	dy := centerY - sourceY
+	distance := float32(math.Sqrt(float64(dx*dx + dy*dy)))
+	if distance <= 0 {
+		return
+	}
+
+	p.KnockbackVelX += (dx / distance) * impulse
+	p.KnockbackVelY += (dy / distance) * impulse
 }
 
 func (p *Player) Heal(amount int) {
