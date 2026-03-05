@@ -34,30 +34,33 @@ type RunResults struct {
 }
 
 type Game struct {
-	State               AppState
-	Player              *gameobjects.Player
-	Enemies             []*gameobjects.Enemy
-	Boss                *gameobjects.Boss
-	Dungeon             *world.Dungeon
-	Camera              *systems.Camera
-	Projectiles         []*Projectile
-	CurrentRoom         *world.Room
-	SelectedClass       gamedata.ClassType
-	LevelUpMenu         bool
-	RewardOptions       []*gamedata.Item
-	SelectedReward      int
-	PlayerMoveTargetX   float32
-	PlayerMoveTargetY   float32
-	HasPlayerMoveTarget bool
-	PlayerAttackTarget  interface{}
-	DebugOverlayEnabled bool
-	BootCompleted       bool
-	LastFrameTime       float32
-	LastUpdateSteps     int
-	RunElapsed          float32
-	Results             RunResults
-	RunPipeline         *RuntimePipeline
-	Settings            settings.Settings
+	State                  AppState
+	Player                 *gameobjects.Player
+	Enemies                []*gameobjects.Enemy
+	Boss                   *gameobjects.Boss
+	Dungeon                *world.Dungeon
+	Camera                 *systems.Camera
+	Projectiles            []*Projectile
+	CurrentRoom            *world.Room
+	SelectedClass          gamedata.ClassType
+	LevelUpMenu            bool
+	RewardOptions          []*gamedata.Item
+	SelectedReward         int
+	PlayerMoveTargetX      float32
+	PlayerMoveTargetY      float32
+	HasPlayerMoveTarget    bool
+	PlayerAttackTarget     interface{}
+	RoomTransitionTimer    float32
+	RoomTransitionDuration float32
+	PendingRoomTransition  bool
+	DebugOverlayEnabled    bool
+	BootCompleted          bool
+	LastFrameTime          float32
+	LastUpdateSteps        int
+	RunElapsed             float32
+	Results                RunResults
+	RunPipeline            *RuntimePipeline
+	Settings               settings.Settings
 }
 
 type Projectile struct {
@@ -75,30 +78,33 @@ type Projectile struct {
 
 func NewGame(cfg settings.Settings) *Game {
 	return &Game{
-		State:               StateBoot,
-		Player:              nil,
-		Enemies:             []*gameobjects.Enemy{},
-		Boss:                nil,
-		Dungeon:             nil,
-		Camera:              systems.NewCamera(),
-		Projectiles:         []*Projectile{},
-		CurrentRoom:         nil,
-		SelectedClass:       gamedata.ClassTypeMelee,
-		LevelUpMenu:         false,
-		RewardOptions:       []*gamedata.Item{},
-		SelectedReward:      0,
-		PlayerMoveTargetX:   0,
-		PlayerMoveTargetY:   0,
-		HasPlayerMoveTarget: false,
-		PlayerAttackTarget:  nil,
-		DebugOverlayEnabled: false,
-		BootCompleted:       false,
-		LastFrameTime:       0,
-		LastUpdateSteps:     0,
-		RunElapsed:          0,
-		Results:             RunResults{},
-		RunPipeline:         NewRuntimePipeline(),
-		Settings:            cfg,
+		State:                  StateBoot,
+		Player:                 nil,
+		Enemies:                []*gameobjects.Enemy{},
+		Boss:                   nil,
+		Dungeon:                nil,
+		Camera:                 systems.NewCamera(),
+		Projectiles:            []*Projectile{},
+		CurrentRoom:            nil,
+		SelectedClass:          gamedata.ClassTypeMelee,
+		LevelUpMenu:            false,
+		RewardOptions:          []*gamedata.Item{},
+		SelectedReward:         0,
+		PlayerMoveTargetX:      0,
+		PlayerMoveTargetY:      0,
+		HasPlayerMoveTarget:    false,
+		PlayerAttackTarget:     nil,
+		RoomTransitionTimer:    0,
+		RoomTransitionDuration: 0.25,
+		PendingRoomTransition:  false,
+		DebugOverlayEnabled:    false,
+		BootCompleted:          false,
+		LastFrameTime:          0,
+		LastUpdateSteps:        0,
+		RunElapsed:             0,
+		Results:                RunResults{},
+		RunPipeline:            NewRuntimePipeline(),
+		Settings:               cfg,
 	}
 }
 
@@ -175,6 +181,9 @@ func (g *Game) StartRun() {
 	g.Player = gameobjects.NewPlayer(startX, startY, g.SelectedClass)
 
 	g.SpawnRoomEnemies()
+	if g.CurrentRoom != nil && !g.CurrentRoom.IsBoss() {
+		g.CurrentRoom.SetDoorsLocked(true)
+	}
 	g.RunElapsed = 0
 	g.State = StateRun
 }
@@ -228,6 +237,8 @@ func (g *Game) ResetState() {
 	g.PlayerMoveTargetY = 0
 	g.HasPlayerMoveTarget = false
 	g.PlayerAttackTarget = nil
+	g.RoomTransitionTimer = 0
+	g.PendingRoomTransition = false
 	g.RunElapsed = 0
 }
 
@@ -290,15 +301,21 @@ func (g *Game) AdvanceToNextRoom() {
 		return
 	}
 
-	startX := g.CurrentRoom.X + g.CurrentRoom.Width/2
-	startY := g.CurrentRoom.Y + g.CurrentRoom.Height/2
+	entryX, entryY := g.CurrentRoom.EntryPoint()
+	startX := entryX - g.Player.Hitbox.Width/2
+	startY := entryY - g.Player.Hitbox.Height/2
 	g.Player.PosX = startX
 	g.Player.PosY = startY
 	g.Player.HP = g.Player.MaxHP
 	g.Player.Alive = true
 
 	g.SpawnRoomEnemies()
+	if !g.CurrentRoom.IsBoss() {
+		g.CurrentRoom.SetDoorsLocked(true)
+	}
 	g.Projectiles = []*Projectile{}
+	g.RoomTransitionTimer = 0
+	g.PendingRoomTransition = false
 }
 
 func (g *Game) IsMenuOpen() bool {
@@ -561,31 +578,99 @@ func (g *Game) drawClassSelect() {
 func (g *Game) drawRun() {
 	if g.Dungeon != nil {
 		for _, room := range g.Dungeon.Rooms {
-			systems.DrawRoom(room.X, room.Y, room.Width, room.Height, room.IsBoss(), g.Camera)
+			systems.DrawRoom(room, g.Camera)
 		}
 	}
 
+	queue := make([]systems.RenderQueueItem, 0, len(g.Enemies)+len(g.Projectiles)+4)
+	stableID := 0
+
 	for _, proj := range g.Projectiles {
-		if proj.Alive {
-			systems.DrawProjectile(proj.X, proj.Y, proj.Radius, g.Camera)
+		if !proj.Alive {
+			continue
 		}
+		depthY, depthX := systems.DepthSortKey(proj.X, proj.Y)
+		projectile := proj
+		queue = append(queue, systems.RenderQueueItem{
+			DepthY:   depthY,
+			DepthX:   depthX,
+			StableID: stableID,
+			Draw: func() {
+				systems.DrawProjectile(projectile.X, projectile.Y, projectile.Radius, g.Camera)
+			},
+		})
+		stableID++
 	}
 
 	for _, enemy := range g.Enemies {
-		systems.DrawEnemy(enemy, g.Camera)
+		if !enemy.IsAlive() {
+			continue
+		}
+		depthY, depthX := systems.DepthSortKey(enemy.PosX+enemy.Hitbox.Width/2, enemy.PosY+enemy.Hitbox.Height)
+		targetEnemy := enemy
+		queue = append(queue, systems.RenderQueueItem{
+			DepthY:   depthY,
+			DepthX:   depthX,
+			StableID: stableID,
+			Draw: func() {
+				systems.DrawEnemy(targetEnemy, g.Camera)
+			},
+		})
+		stableID++
 	}
 
-	if g.Boss != nil {
-		systems.DrawBoss(g.Boss, g.Camera)
+	if g.Boss != nil && g.Boss.IsAlive() {
+		depthY, depthX := systems.DepthSortKey(g.Boss.PosX+g.Boss.Hitbox.Width/2, g.Boss.PosY+g.Boss.Hitbox.Height)
+		boss := g.Boss
+		queue = append(queue, systems.RenderQueueItem{
+			DepthY:   depthY,
+			DepthX:   depthX,
+			StableID: stableID,
+			Draw: func() {
+				systems.DrawBoss(boss, g.Camera)
+			},
+		})
+		stableID++
+
 		for _, proj := range g.Boss.Projectiles {
-			if proj.Alive {
-				systems.DrawBossProjectile(proj.X, proj.Y, proj.Radius, g.Camera)
+			if !proj.Alive {
+				continue
 			}
+			depthY, depthX := systems.DepthSortKey(proj.X, proj.Y)
+			bossProj := proj
+			queue = append(queue, systems.RenderQueueItem{
+				DepthY:   depthY,
+				DepthX:   depthX,
+				StableID: stableID,
+				Draw: func() {
+					systems.DrawBossProjectile(bossProj.X, bossProj.Y, bossProj.Radius, g.Camera)
+				},
+			})
+			stableID++
 		}
 	}
 
 	if g.Player != nil {
-		systems.DrawPlayer(g.Player, g.Camera)
+		depthY, depthX := systems.DepthSortKey(g.Player.PosX+g.Player.Hitbox.Width/2, g.Player.PosY+g.Player.Hitbox.Height)
+		queue = append(queue, systems.RenderQueueItem{
+			DepthY:   depthY,
+			DepthX:   depthX,
+			StableID: stableID,
+			Draw: func() {
+				systems.DrawPlayer(g.Player, g.Camera)
+			},
+		})
+		stableID++
+	}
+
+	systems.SortRenderQueue(queue)
+	for _, item := range queue {
+		if item.Draw != nil {
+			item.Draw()
+		}
+	}
+
+	if g.Player != nil {
 		systems.DrawSkillBar(g.Player, g.Settings.SkillLabels())
 	}
 
@@ -614,6 +699,18 @@ func (g *Game) drawRun() {
 			text := fmt.Sprintf("%s: %d", stat, statValues[i])
 			rl.DrawText(text, WindowWidth/2-180, WindowHeight/2-60+int32(i*25), 18, rl.White)
 		}
+	}
+
+	if g.RoomTransitionTimer > 0 && g.RoomTransitionDuration > 0 {
+		alphaRatio := g.RoomTransitionTimer / g.RoomTransitionDuration
+		if alphaRatio < 0 {
+			alphaRatio = 0
+		}
+		if alphaRatio > 1 {
+			alphaRatio = 1
+		}
+		alpha := uint8(alphaRatio * 210)
+		rl.DrawRectangle(0, 0, WindowWidth, WindowHeight, rl.NewColor(0, 0, 0, alpha))
 	}
 }
 

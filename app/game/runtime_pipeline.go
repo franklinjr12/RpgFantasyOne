@@ -87,6 +87,10 @@ func (s *inputSystem) Update(ctx *RuntimeContext, _ float32) {
 	ctx.Input = systems.UpdateInput(g.Camera)
 	ctx.IsMenuOpen = g.IsMenuOpen()
 
+	if g.RoomTransitionTimer > 0 || g.PendingRoomTransition {
+		return
+	}
+
 	if !ctx.IsMenuOpen && ctx.Input.HasMoveTarget {
 		g.PlayerMoveTargetX = ctx.Input.MoveToX
 		g.PlayerMoveTargetY = ctx.Input.MoveToY
@@ -99,7 +103,7 @@ func (s *inputSystem) Update(ctx *RuntimeContext, _ float32) {
 	}
 
 	mouseX, mouseY := systems.GetMousePosition()
-	worldX, worldY := systems.ScreenToWorld(mouseX, mouseY, g.Camera)
+	worldX, worldY := systems.ScreenToWorldIso(mouseX, mouseY, g.Camera)
 
 	for _, enemy := range g.Enemies {
 		if !enemy.IsAlive() {
@@ -316,8 +320,14 @@ func (s *movementSystem) Update(ctx *RuntimeContext, dt float32) {
 	if ctx.IsMenuOpen || g.Player == nil {
 		return
 	}
+	if g.RoomTransitionTimer > 0 || g.PendingRoomTransition {
+		return
+	}
 
 	g.UpdateAutoAttack(dt)
+
+	moveDeltaX := float32(0)
+	moveDeltaY := float32(0)
 
 	if g.HasPlayerMoveTarget {
 		playerCenterX, playerCenterY := g.Player.Center()
@@ -331,29 +341,30 @@ func (s *movementSystem) Update(ctx *RuntimeContext, dt float32) {
 			if moveDistance > distance {
 				moveDistance = distance
 			}
-			g.Player.PosX += (dx / distance) * moveDistance
-			g.Player.PosY += (dy / distance) * moveDistance
+			moveDeltaX = (dx / distance) * moveDistance
+			moveDeltaY = (dy / distance) * moveDistance
 		} else {
 			g.HasPlayerMoveTarget = false
 		}
 	}
 
 	if g.CurrentRoom == nil {
+		g.Player.PosX += moveDeltaX
+		g.Player.PosY += moveDeltaY
 		return
 	}
 
-	if g.Player.PosX < g.CurrentRoom.X {
-		g.Player.PosX = g.CurrentRoom.X
-	}
-	if g.Player.PosX+g.Player.Hitbox.Width > g.CurrentRoom.X+g.CurrentRoom.Width {
-		g.Player.PosX = g.CurrentRoom.X + g.CurrentRoom.Width - g.Player.Hitbox.Width
-	}
-	if g.Player.PosY < g.CurrentRoom.Y {
-		g.Player.PosY = g.CurrentRoom.Y
-	}
-	if g.Player.PosY+g.Player.Hitbox.Height > g.CurrentRoom.Y+g.CurrentRoom.Height {
-		g.Player.PosY = g.CurrentRoom.Y + g.CurrentRoom.Height - g.Player.Hitbox.Height
-	}
+	newX, newY := systems.ResolvePlayerMovement(
+		g.Player.PosX,
+		g.Player.PosY,
+		g.Player.Hitbox.Width,
+		g.Player.Hitbox.Height,
+		moveDeltaX,
+		moveDeltaY,
+		g.CurrentRoom,
+	)
+	g.Player.PosX = newX
+	g.Player.PosY = newY
 }
 
 type combatResolveSystem struct{}
@@ -393,10 +404,21 @@ type dungeonRunSystem struct{}
 
 func (s *dungeonRunSystem) Name() string { return "Dungeon/Run" }
 
-func (s *dungeonRunSystem) Update(ctx *RuntimeContext, _ float32) {
+func (s *dungeonRunSystem) Update(ctx *RuntimeContext, dt float32) {
 	g := ctx.Game
 	if g.Player == nil {
 		return
+	}
+
+	if g.RoomTransitionTimer > 0 {
+		g.RoomTransitionTimer -= dt
+		if g.RoomTransitionTimer <= 0 {
+			g.RoomTransitionTimer = 0
+			if g.PendingRoomTransition {
+				g.PendingRoomTransition = false
+				g.AdvanceToNextRoom()
+			}
+		}
 	}
 
 	if !g.Player.IsAlive() {
@@ -404,11 +426,39 @@ func (s *dungeonRunSystem) Update(ctx *RuntimeContext, _ float32) {
 		return
 	}
 
-	if g.CheckRoomCompletion() {
-		if g.CurrentRoom != nil && g.CurrentRoom.IsBoss() {
+	if g.CurrentRoom != nil {
+		roomCleared := g.CheckRoomCompletion()
+		if g.CurrentRoom.IsBoss() && roomCleared {
 			g.EnterReward()
-		} else {
-			g.AdvanceToNextRoom()
+			return
+		}
+
+		if !g.CurrentRoom.IsBoss() {
+			g.CurrentRoom.SetDoorsLocked(!roomCleared)
+		}
+
+		if roomCleared && !g.CurrentRoom.IsBoss() && !g.PendingRoomTransition && g.RoomTransitionTimer == 0 {
+			playerBounds := world.AABB{
+				X:      g.Player.PosX,
+				Y:      g.Player.PosY,
+				Width:  g.Player.Hitbox.Width,
+				Height: g.Player.Hitbox.Height,
+			}
+
+			for _, door := range g.CurrentRoom.Doors {
+				if door == nil || door.Locked {
+					continue
+				}
+				if !systems.AABBOverlap(playerBounds, door.Bounds) {
+					continue
+				}
+
+				g.PendingRoomTransition = true
+				g.RoomTransitionTimer = g.RoomTransitionDuration
+				g.HasPlayerMoveTarget = false
+				g.PlayerAttackTarget = nil
+				break
+			}
 		}
 	}
 

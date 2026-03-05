@@ -20,7 +20,7 @@ func UpdateInput(camera *Camera) *Input {
 
 	if rl.IsMouseButtonPressed(rl.MouseRightButton) {
 		mouseX, mouseY := GetMousePosition()
-		moveToX, moveToY = ScreenToWorld(mouseX, mouseY, camera)
+		moveToX, moveToY = ScreenToWorldIso(mouseX, mouseY, camera)
 		hasMoveTarget = true
 	}
 

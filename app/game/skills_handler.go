@@ -11,7 +11,7 @@ func (g *Game) TryCastSkill(skill *gamedata.Skill, input *systems.Input) {
 	}
 
 	mouseX, mouseY := systems.GetMousePosition()
-	worldX, worldY := systems.ScreenToWorld(mouseX, mouseY, g.Camera)
+	worldX, worldY := systems.ScreenToWorldIso(mouseX, mouseY, g.Camera)
 	playerCenterX, playerCenterY := g.Player.Center()
 
 	if skill.ManaCost > 0 {
@@ -31,8 +31,19 @@ func (g *Game) TryCastSkill(skill *gamedata.Skill, input *systems.Input) {
 			distance := systems.GetDistance(0, 0, dx, dy)
 			if distance > 0 {
 				rollDistance := float32(80)
-				g.Player.PosX += (dx / distance) * rollDistance
-				g.Player.PosY += (dy / distance) * rollDistance
+				moveX := (dx / distance) * rollDistance
+				moveY := (dy / distance) * rollDistance
+				nextX, nextY := systems.ResolvePlayerMovement(
+					g.Player.PosX,
+					g.Player.PosY,
+					g.Player.Hitbox.Width,
+					g.Player.Hitbox.Height,
+					moveX,
+					moveY,
+					g.CurrentRoom,
+				)
+				g.Player.PosX = nextX
+				g.Player.PosY = nextY
 			}
 		}
 

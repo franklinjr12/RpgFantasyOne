@@ -7,6 +7,7 @@ import (
 	"singlefantasy/app/assets"
 	"singlefantasy/app/gamedata"
 	"singlefantasy/app/gameobjects"
+	"singlefantasy/app/world"
 
 	rl "github.com/gen2brain/raylib-go/raylib"
 )
@@ -16,8 +17,8 @@ var (
 	spriteHeight = float32(72)
 )
 
-var TerrainColorNormalRGBA = rl.NewColor(128, 128, 128, 255)
-var TerrainColorBossRGBA = rl.NewColor(64, 64, 64, 255)
+var TerrainColorNormalRGBA = rl.NewColor(110, 122, 126, 255)
+var TerrainColorBossRGBA = rl.NewColor(78, 88, 102, 255)
 var PlayerColorRGBA = rl.NewColor(0, 0, 255, 255)
 var EnemyColorRGBA = rl.NewColor(255, 0, 0, 255)
 var EliteColorRGBA = rl.NewColor(255, 136, 0, 255)
@@ -25,10 +26,13 @@ var BossColorRGBA = rl.NewColor(136, 0, 255, 255)
 var ProjectileColorRGBA = rl.NewColor(255, 255, 0, 255)
 
 type Camera struct {
-	X      float32
-	Y      float32
-	Width  float32
-	Height float32
+	X         float32
+	Y         float32
+	TargetX   float32
+	TargetY   float32
+	Width     float32
+	Height    float32
+	Smoothing float32
 }
 
 type uiSkillSlot struct {
@@ -48,69 +52,65 @@ const (
 
 func NewCamera() *Camera {
 	return &Camera{
-		X:      0,
-		Y:      0,
-		Width:  CameraWidth,
-		Height: CameraHeight,
+		X:         0,
+		Y:         0,
+		TargetX:   0,
+		TargetY:   0,
+		Width:     CameraWidth,
+		Height:    CameraHeight,
+		Smoothing: 0.18,
 	}
-}
-
-func WorldToScreen(worldX, worldY float32, camera *Camera) (float32, float32) {
-	screenX := worldX - camera.X
-	screenY := worldY - camera.Y
-	return screenX, screenY
-}
-
-func ScreenToWorld(screenX, screenY float32, camera *Camera) (float32, float32) {
-	worldX := screenX + camera.X
-	worldY := screenY + camera.Y
-	return worldX, worldY
-}
-
-func IsometricToScreen(isoX, isoY float32) (float32, float32) {
-	screenX := (isoX - isoY) * 0.5
-	screenY := (isoX + isoY) * 0.25
-	return screenX, screenY
-}
-
-func ScreenToIsometric(screenX, screenY float32) (float32, float32) {
-	isoX := screenX + screenY*2
-	isoY := -screenX + screenY*2
-	return isoX, isoY
 }
 
 func UpdateCamera(camera *Camera, playerX, playerY, worldWidth, worldHeight float32) {
-	targetX := playerX - camera.Width/2
-	targetY := playerY - camera.Height/2
-
-	if targetX < 0 {
-		targetX = 0
-	}
-	if targetY < 0 {
-		targetY = 0
-	}
-	if targetX+camera.Width > worldWidth {
-		targetX = worldWidth - camera.Width
-	}
-	if targetY+camera.Height > worldHeight {
-		targetY = worldHeight - camera.Height
+	if camera == nil {
+		return
 	}
 
-	camera.X = targetX
-	camera.Y = targetY
+	maxX := worldWidth - camera.Width
+	if maxX < 0 {
+		maxX = 0
+	}
+	maxY := worldHeight - camera.Height
+	if maxY < 0 {
+		maxY = 0
+	}
+
+	targetX := clamp(playerX-camera.Width/2, 0, maxX)
+	targetY := clamp(playerY-camera.Height/2, 0, maxY)
+	camera.TargetX = targetX
+	camera.TargetY = targetY
+
+	smoothing := camera.Smoothing
+	if smoothing <= 0 || smoothing > 1 {
+		smoothing = 1
+	}
+
+	camera.X += (targetX - camera.X) * smoothing
+	camera.Y += (targetY - camera.Y) * smoothing
+
+	if nearlyEqual(camera.X, targetX, 0.05) {
+		camera.X = targetX
+	}
+	if nearlyEqual(camera.Y, targetY, 0.05) {
+		camera.Y = targetY
+	}
+
+	camera.X = clamp(camera.X, 0, maxX)
+	camera.Y = clamp(camera.Y, 0, maxY)
 }
 
 func DrawPlayer(player *gameobjects.Player, camera *Camera) {
-	screenX, screenY := WorldToScreen(player.PosX, player.PosY, camera)
+	screenX, screenY := actorScreenRect(player.PosX, player.PosY, player.Hitbox.Width, player.Hitbox.Height, camera)
 
 	var sourceRect rl.Rectangle
 	switch player.Class.Type {
-	case 0: // ClassTypeMelee
-		sourceRect = getSpriteSourceRect(1, 2) // row 2, column 3 (0-indexed: row 1, col 2)
-	case 1: // ClassTypeRanged
-		sourceRect = getSpriteSourceRect(0, 2) // row 1, column 3 (0-indexed: row 0, col 2)
-	case 2: // ClassTypeCaster
-		sourceRect = getSpriteSourceRect(0, 0) // row 1, column 1 (0-indexed: row 0, col 0)
+	case 0:
+		sourceRect = getSpriteSourceRect(1, 2)
+	case 1:
+		sourceRect = getSpriteSourceRect(0, 2)
+	case 2:
+		sourceRect = getSpriteSourceRect(0, 0)
 	default:
 		sourceRect = getSpriteSourceRect(0, 0)
 	}
@@ -123,21 +123,7 @@ func DrawPlayer(player *gameobjects.Player, camera *Camera) {
 	}
 
 	drawTextureOrRect(GetSpriteSheet(), sourceRect, destRect, tint, rl.Blue)
-
-	healthBarWidth := player.Hitbox.Width
-	healthBarHeight := float32(5)
-	healthBarX := screenX
-	healthBarY := screenY - healthBarHeight - 3
-	healthPercent := float32(player.HP) / float32(player.MaxHP)
-	if healthPercent < 0 {
-		healthPercent = 0
-	}
-	if healthPercent > 1 {
-		healthPercent = 1
-	}
-
-	rl.DrawRectangleRec(rl.NewRectangle(healthBarX, healthBarY, healthBarWidth, healthBarHeight), rl.Red)
-	rl.DrawRectangleRec(rl.NewRectangle(healthBarX, healthBarY, healthBarWidth*healthPercent, healthBarHeight), rl.Green)
+	drawHealthBar(destRect, float32(player.HP)/float32(player.MaxHP), 5)
 }
 
 func DrawEnemy(enemy *gameobjects.Enemy, camera *Camera) {
@@ -145,9 +131,9 @@ func DrawEnemy(enemy *gameobjects.Enemy, camera *Camera) {
 		return
 	}
 
-	screenX, screenY := WorldToScreen(enemy.PosX, enemy.PosY, camera)
+	screenX, screenY := actorScreenRect(enemy.PosX, enemy.PosY, enemy.Hitbox.Width, enemy.Hitbox.Height, camera)
 
-	sourceRect := getSpriteSourceRect(2, 4) // row 3, column 5 (0-indexed: row 2, col 4)
+	sourceRect := getSpriteSourceRect(2, 4)
 	destRect := rl.NewRectangle(screenX, screenY, enemy.Hitbox.Width, enemy.Hitbox.Height)
 
 	tint := rl.White
@@ -160,40 +146,86 @@ func DrawEnemy(enemy *gameobjects.Enemy, camera *Camera) {
 	}
 
 	drawTextureOrRect(GetSpriteSheet(), sourceRect, destRect, tint, rl.Red)
-
-	healthBarWidth := enemy.Hitbox.Width
-	healthBarHeight := float32(5)
-	healthBarX := screenX
-	healthBarY := screenY - healthBarHeight - 3
-	healthPercent := float32(enemy.HP) / float32(enemy.MaxHP)
-	if healthPercent < 0 {
-		healthPercent = 0
-	}
-	if healthPercent > 1 {
-		healthPercent = 1
-	}
-
-	rl.DrawRectangleRec(rl.NewRectangle(healthBarX, healthBarY, healthBarWidth, healthBarHeight), rl.Red)
-	rl.DrawRectangleRec(rl.NewRectangle(healthBarX, healthBarY, healthBarWidth*healthPercent, healthBarHeight), rl.Green)
+	drawHealthBar(destRect, float32(enemy.HP)/float32(enemy.MaxHP), 5)
 }
 
-func DrawRoom(x, y, width, height float32, isBoss bool, camera *Camera) {
-	screenX, screenY := WorldToScreen(x, y, camera)
-
-	var color rl.Color
-	if isBoss {
-		color = TerrainColorBossRGBA
-	} else {
-		color = TerrainColorNormalRGBA
+func DrawRoom(room *world.Room, camera *Camera) {
+	if room == nil {
+		return
 	}
 
-	rl.DrawRectangleRec(rl.NewRectangle(screenX, screenY, width, height), color)
-	rl.DrawRectangleLinesEx(rl.NewRectangle(screenX, screenY, width, height), 2, rl.Black)
+	corners := projectAABBBase(world.AABB{X: room.X, Y: room.Y, Width: room.Width, Height: room.Height}, camera)
+
+	floorColor := TerrainColorNormalRGBA
+	if room.IsBoss() {
+		floorColor = TerrainColorBossRGBA
+	}
+	wallColor := shadeColor(floorColor, -26)
+	outlineColor := shadeColor(floorColor, -65)
+
+	drawIsoQuad(corners, floorColor)
+
+	wallHeight := float32(46)
+	northTop := liftIso(corners[0], wallHeight)
+	eastTop := liftIso(corners[1], wallHeight)
+	southTop := liftIso(corners[2], wallHeight)
+	westTop := liftIso(corners[3], wallHeight)
+
+	drawIsoQuad([4]rl.Vector2{eastTop, southTop, corners[2], corners[1]}, wallColor)
+	drawIsoQuad([4]rl.Vector2{westTop, southTop, corners[2], corners[3]}, shadeColor(wallColor, -12))
+	drawIsoOutline(corners, outlineColor)
+
+	for _, obstacle := range room.Obstacles {
+		DrawObstacle(obstacle, camera)
+	}
+	for _, door := range room.Doors {
+		DrawDoor(door, camera)
+	}
+
+	drawIsoOutline([4]rl.Vector2{northTop, eastTop, southTop, westTop}, shadeColor(outlineColor, 10))
+}
+
+func DrawObstacle(obstacle world.AABB, camera *Camera) {
+	base := projectAABBBase(obstacle, camera)
+	lift := float32(28)
+	top := [4]rl.Vector2{liftIso(base[0], lift), liftIso(base[1], lift), liftIso(base[2], lift), liftIso(base[3], lift)}
+
+	topColor := rl.NewColor(123, 123, 123, 255)
+	rightColor := rl.NewColor(98, 98, 98, 255)
+	leftColor := rl.NewColor(84, 84, 84, 255)
+	outline := rl.NewColor(30, 30, 30, 255)
+
+	drawIsoQuad([4]rl.Vector2{top[1], top[2], base[2], base[1]}, rightColor)
+	drawIsoQuad([4]rl.Vector2{top[2], top[3], base[3], base[2]}, leftColor)
+	drawIsoQuad(top, topColor)
+	drawIsoOutline(top, outline)
+}
+
+func DrawDoor(door *world.Door, camera *Camera) {
+	if door == nil {
+		return
+	}
+
+	base := projectAABBBase(door.Bounds, camera)
+	lift := float32(36)
+	top := [4]rl.Vector2{liftIso(base[0], lift), liftIso(base[1], lift), liftIso(base[2], lift), liftIso(base[3], lift)}
+
+	topColor := rl.NewColor(48, 168, 102, 255)
+	sideColor := rl.NewColor(38, 132, 80, 255)
+	if door.Locked {
+		topColor = rl.NewColor(168, 82, 68, 255)
+		sideColor = rl.NewColor(130, 62, 52, 255)
+	}
+
+	drawIsoQuad([4]rl.Vector2{top[1], top[2], base[2], base[1]}, sideColor)
+	drawIsoQuad([4]rl.Vector2{top[2], top[3], base[3], base[2]}, shadeColor(sideColor, -12))
+	drawIsoQuad(top, topColor)
+	drawIsoOutline(top, shadeColor(topColor, -40))
 }
 
 func DrawProjectile(x, y, radius float32, camera *Camera) {
-	screenX, screenY := WorldToScreen(x, y, camera)
-	rl.DrawCircle(int32(screenX+radius), int32(screenY+radius), radius, ProjectileColorRGBA)
+	screenX, screenY := WorldToScreenIso(x, y, camera)
+	rl.DrawCircle(int32(screenX), int32(screenY), radius, ProjectileColorRGBA)
 }
 
 func DrawBoss(boss *gameobjects.Boss, camera *Camera) {
@@ -201,9 +233,9 @@ func DrawBoss(boss *gameobjects.Boss, camera *Camera) {
 		return
 	}
 
-	screenX, screenY := WorldToScreen(boss.PosX, boss.PosY, camera)
+	screenX, screenY := actorScreenRect(boss.PosX, boss.PosY, boss.Hitbox.Width, boss.Hitbox.Height, camera)
 
-	sourceRect := getSpriteSourceRect(2, 4) // row 3, column 5 (0-indexed: row 2, col 4)
+	sourceRect := getSpriteSourceRect(2, 4)
 	destRect := rl.NewRectangle(screenX, screenY, boss.Hitbox.Width, boss.Hitbox.Height)
 
 	tint := rl.NewColor(136, 0, 255, 255)
@@ -214,30 +246,18 @@ func DrawBoss(boss *gameobjects.Boss, camera *Camera) {
 	}
 
 	if boss.TelegraphTimer > 0 {
-		rl.DrawCircleLines(int32(screenX+boss.Hitbox.Width/2), int32(screenY+boss.Hitbox.Height/2), 100, rl.Red)
+		centerX, centerY := boss.Center()
+		tx, ty := WorldToScreenIso(centerX, centerY, camera)
+		rl.DrawCircleLines(int32(tx), int32(ty), 70, rl.Red)
 	}
 
 	drawTextureOrRect(GetSpriteSheet(), sourceRect, destRect, tint, rl.Purple)
-
-	healthBarWidth := boss.Hitbox.Width
-	healthBarHeight := float32(8)
-	healthBarX := screenX
-	healthBarY := screenY - healthBarHeight - 5
-	healthPercent := float32(boss.HP) / float32(boss.MaxHP)
-	if healthPercent < 0 {
-		healthPercent = 0
-	}
-	if healthPercent > 1 {
-		healthPercent = 1
-	}
-
-	rl.DrawRectangleRec(rl.NewRectangle(healthBarX, healthBarY, healthBarWidth, healthBarHeight), rl.Red)
-	rl.DrawRectangleRec(rl.NewRectangle(healthBarX, healthBarY, healthBarWidth*healthPercent, healthBarHeight), rl.Green)
+	drawHealthBar(destRect, float32(boss.HP)/float32(boss.MaxHP), 8)
 }
 
 func DrawBossProjectile(x, y, radius float32, camera *Camera) {
-	screenX, screenY := WorldToScreen(x, y, camera)
-	rl.DrawCircle(int32(screenX+radius), int32(screenY+radius), radius, rl.Purple)
+	screenX, screenY := WorldToScreenIso(x, y, camera)
+	rl.DrawCircle(int32(screenX), int32(screenY), radius, rl.Purple)
 }
 
 func GetDistance(x1, y1, x2, y2 float32) float32 {
@@ -264,6 +284,86 @@ func drawTextureOrRect(texture rl.Texture2D, sourceRect, destRect rl.Rectangle, 
 
 	rl.DrawRectangleRec(destRect, fallbackColor)
 	rl.DrawRectangleLinesEx(destRect, 1, rl.Black)
+}
+
+func drawHealthBar(destRect rl.Rectangle, healthPercent float32, height float32) {
+	if healthPercent < 0 {
+		healthPercent = 0
+	}
+	if healthPercent > 1 {
+		healthPercent = 1
+	}
+
+	healthBarWidth := destRect.Width
+	healthBarX := destRect.X
+	healthBarY := destRect.Y - height - 3
+
+	rl.DrawRectangleRec(rl.NewRectangle(healthBarX, healthBarY, healthBarWidth, height), rl.Red)
+	rl.DrawRectangleRec(rl.NewRectangle(healthBarX, healthBarY, healthBarWidth*healthPercent, height), rl.Green)
+}
+
+func actorScreenRect(worldX, worldY, width, height float32, camera *Camera) (float32, float32) {
+	anchorX := worldX + width/2
+	anchorY := worldY + height
+	screenX, screenY := WorldToScreenIso(anchorX, anchorY, camera)
+	return screenX - width/2, screenY - height
+}
+
+func projectAABBBase(rect world.AABB, camera *Camera) [4]rl.Vector2 {
+	x1, y1 := WorldToScreenIso(rect.X, rect.Y, camera)
+	x2, y2 := WorldToScreenIso(rect.X+rect.Width, rect.Y, camera)
+	x3, y3 := WorldToScreenIso(rect.X+rect.Width, rect.Y+rect.Height, camera)
+	x4, y4 := WorldToScreenIso(rect.X, rect.Y+rect.Height, camera)
+
+	return [4]rl.Vector2{
+		rl.NewVector2(x1, y1),
+		rl.NewVector2(x2, y2),
+		rl.NewVector2(x3, y3),
+		rl.NewVector2(x4, y4),
+	}
+}
+
+func drawIsoQuad(points [4]rl.Vector2, color rl.Color) {
+	rl.DrawTriangle(points[0], points[1], points[2], color)
+	rl.DrawTriangle(points[0], points[2], points[3], color)
+}
+
+func drawIsoOutline(points [4]rl.Vector2, color rl.Color) {
+	rl.DrawLineV(points[0], points[1], color)
+	rl.DrawLineV(points[1], points[2], color)
+	rl.DrawLineV(points[2], points[3], color)
+	rl.DrawLineV(points[3], points[0], color)
+}
+
+func liftIso(point rl.Vector2, amount float32) rl.Vector2 {
+	return rl.NewVector2(point.X, point.Y-amount)
+}
+
+func shadeColor(base rl.Color, delta int32) rl.Color {
+	r := int32(base.R) + delta
+	g := int32(base.G) + delta
+	b := int32(base.B) + delta
+
+	if r < 0 {
+		r = 0
+	}
+	if g < 0 {
+		g = 0
+	}
+	if b < 0 {
+		b = 0
+	}
+	if r > 255 {
+		r = 255
+	}
+	if g > 255 {
+		g = 255
+	}
+	if b > 255 {
+		b = 255
+	}
+
+	return rl.NewColor(uint8(r), uint8(g), uint8(b), base.A)
 }
 
 func DrawSkillBar(player *gameobjects.Player, keyLabels []string) {

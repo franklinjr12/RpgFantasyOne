@@ -13,11 +13,11 @@
 ---
 
 ## 1) Core Architecture (Systems + Data)
-- [ ] Implement base `Entity` model (pos/vel, HP, stats, hitbox, effects list, faction, alive)
-- [ ] Implement system scaffolding + update order:
+- [x] Implement base `Entity` model (pos/vel, HP, stats, hitbox, effects list, faction, alive)
+- [x] Implement system scaffolding + update order:
   - Input → AI → Casting → Projectiles → Movement → Combat Resolve → Effects → Dungeon/Run → UI/Render
-- [ ] Central config/data layer for classes, skills, enemies, items, effects (code tables ok for MVP)
-- [ ] Save/load minimal settings (volume, fullscreen, keybind only display not configurable yet)
+- [x] Central config/data layer for classes, skills, enemies, items, effects (code tables ok for MVP)
+- [x] Save/load minimal settings (volume, fullscreen, keybind only display not configurable yet)
 
 ---
 

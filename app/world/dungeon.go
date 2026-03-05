@@ -28,7 +28,30 @@ func NewDungeon() *Dungeon {
 	bossRoom := NewRoom(x, y, RoomTypeBoss)
 	dungeon.Rooms = append(dungeon.Rooms, bossRoom)
 
+	dungeon.attachProgressionDoors()
 	return dungeon
+}
+
+func (d *Dungeon) attachProgressionDoors() {
+	for index, room := range d.Rooms {
+		if room == nil || room.IsBoss() {
+			continue
+		}
+
+		doorY := room.Y + room.Height/2 - DoorHeight/2
+		doorX := room.X + room.Width - DoorWidth - 10
+		door := &Door{
+			Bounds: AABB{
+				X:      doorX,
+				Y:      doorY,
+				Width:  DoorWidth,
+				Height: DoorHeight,
+			},
+			Locked:          true,
+			TargetRoomIndex: index + 1,
+		}
+		room.Doors = append(room.Doors, door)
+	}
 }
 
 func (d *Dungeon) GetCurrentRoom() *Room {
