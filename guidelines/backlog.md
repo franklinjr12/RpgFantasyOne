@@ -30,18 +30,18 @@
 ---
 
 ## 3) Player Controller & Feel
-- [ ] Player movement (right mouse click) with speed, acceleration (light), and collision
-- [ ] Facing direction + sprite flip (all sprites are facing right, so need to flip if going left)
-- [ ] Basic attack (melee swing or ranged shot depending on class) with hit timing
-- [ ] Hurt/iframes tuning (short, readable) + hit feedback (flash/knockback)
+- [x] Player movement (right mouse click) with speed, acceleration (light), and collision
+- [x] Facing direction + sprite flip (all sprites are facing right, so need to flip if going left)
+- [x] Basic attack (melee swing or ranged shot depending on class) with hit timing
+- [x] Hurt/iframes tuning (short, readable) + hit feedback (flash/knockback)
 
 ---
 
 ## 4) Stats, Leveling, and Build Core
-- [ ] Six-stat system implemented (STR/AGI/VIT/INT/DEX/LUK or equivalents)
-- [ ] Derived stats computation (damage, attack speed, move speed, resist, crit, etc.)
-- [ ] XP + level ups during a run; allocate stat points via UI
-- [ ] Class identity baselines (starting stats, growth bias)
+- [x] Six-stat system implemented (STR/AGI/VIT/INT/DEX/LUK or equivalents)
+- [x] Derived stats computation (damage, attack speed, move speed, resist, crit, etc.)
+- [x] XP + level ups during a run; allocate stat points via UI
+- [x] Class identity baselines (starting stats, growth bias)
 
 ---
 

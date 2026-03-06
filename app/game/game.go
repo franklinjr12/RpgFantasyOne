@@ -432,6 +432,16 @@ func (g *Game) drawClassSelect() {
 		}
 		rl.DrawText(name, WindowWidth/2-80, WindowHeight/2-60+int32(i*35), 26, color)
 	}
+
+	selectedClass := gamedata.GetClassData(g.SelectedClass)
+	if selectedClass != nil {
+		base := selectedClass.BaselineStats
+		baselineText := fmt.Sprintf("Base Stats: STR %d  AGI %d  VIT %d  INT %d  DEX %d  LUK %d", base.STR, base.AGI, base.VIT, base.INT, base.DEX, base.LUK)
+		growthText := fmt.Sprintf("Growth Bias: +%d %s per level", gamedata.LevelUpGrowthStatPoints, selectedClass.GrowthBias.String())
+		rl.DrawText(baselineText, WindowWidth/2-360, WindowHeight/2+20, 20, rl.DarkGray)
+		rl.DrawText(growthText, WindowWidth/2-360, WindowHeight/2+50, 20, rl.DarkGray)
+	}
+
 	rl.DrawText("Press ENTER or SPACE to Confirm", WindowWidth/2-180, WindowHeight/2+90, 22, rl.DarkGray)
 }
 
@@ -548,16 +558,28 @@ func (g *Game) drawRun() {
 		rl.DrawText(manaText, 10, 90, 20, rl.Black)
 	}
 	rl.DrawText(levelText, 10, 115, 20, rl.Black)
+	statPointColor := rl.Gray
+	if g.Player.StatPoints > 0 {
+		statPointColor = rl.DarkGreen
+	}
+	rl.DrawText(fmt.Sprintf("Stat Points: %d", g.Player.StatPoints), 10, 140, 20, statPointColor)
 
 	if g.LevelUpMenu {
 		rl.DrawRectangle(WindowWidth/2-200, WindowHeight/2-150, 400, 300, rl.NewColor(0, 0, 0, 200))
 		rl.DrawText("Level Up! Allocate Stat Points", WindowWidth/2-180, WindowHeight/2-120, 24, rl.White)
 		rl.DrawText(fmt.Sprintf("Points: %d", g.Player.StatPoints), WindowWidth/2-180, WindowHeight/2-90, 20, rl.White)
+		rl.DrawText(
+			fmt.Sprintf("Growth Bias: +%d %s/level", gamedata.LevelUpGrowthStatPoints, g.Player.Class.GrowthBias.String()),
+			WindowWidth/2-180,
+			WindowHeight/2-75,
+			16,
+			rl.LightGray,
+		)
 		stats := []string{"1: STR", "2: AGI", "3: VIT", "4: INT", "5: DEX", "6: LUK"}
 		statValues := []int{g.Player.Stats.STR, g.Player.Stats.AGI, g.Player.Stats.VIT, g.Player.Stats.INT, g.Player.Stats.DEX, g.Player.Stats.LUK}
 		for i, stat := range stats {
 			text := fmt.Sprintf("%s: %d", stat, statValues[i])
-			rl.DrawText(text, WindowWidth/2-180, WindowHeight/2-60+int32(i*25), 18, rl.White)
+			rl.DrawText(text, WindowWidth/2-180, WindowHeight/2-45+int32(i*25), 18, rl.White)
 		}
 	}
 

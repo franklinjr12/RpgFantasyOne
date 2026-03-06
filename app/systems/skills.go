@@ -94,7 +94,7 @@ func ResolveTargets(caster *gameobjects.Player, intentX, intentY float32, spec g
 func ApplySkill(caster *gameobjects.Player, skill *gamedata.Skill, targets []interface{}) {
 	for _, target := range targets {
 		if skill.DamageSpec != nil {
-			rawDamage := ComputeDamage(skill.DamageSpec, caster.Stats)
+			rawDamage := ComputeDamage(skill.DamageSpec, caster.GetEffectiveStats())
 
 			if gamedata.HasEffect(&caster.Effects, gamedata.EffectDamageBoost) {
 				magnitude := gamedata.GetEffectMagnitude(&caster.Effects, gamedata.EffectDamageBoost)
@@ -105,7 +105,7 @@ func ApplySkill(caster *gameobjects.Player, skill *gamedata.Skill, targets []int
 
 			switch t := target.(type) {
 			case *gameobjects.Player:
-				t.TakeDamage(finalDamage)
+				t.TakeTypedDamage(finalDamage, skill.DamageSpec.DamageType)
 			case *gameobjects.Enemy:
 				t.TakeDamage(finalDamage)
 			case *gameobjects.Boss:

@@ -19,7 +19,7 @@ func (g *Game) ApplyPlayerDirectHit(damage int, sourceX, sourceY float32) bool {
 		return false
 	}
 
-	g.Player.TakeDamageWithoutFlash(damage)
+	g.Player.TakeTypedDamageWithoutFlash(damage, gamedata.DamagePhysical)
 	g.Player.HitFlashTimer = PlayerHitFlashDuration
 	g.Player.StartHurtIFrames(PlayerHurtIFrameDuration)
 	g.Player.ApplyKnockbackFrom(sourceX, sourceY, PlayerKnockbackImpulse)

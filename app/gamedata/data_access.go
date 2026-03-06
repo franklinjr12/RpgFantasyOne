@@ -4,6 +4,22 @@ func GetClassData(classType ClassType) *Class {
 	return GetClass(classType)
 }
 
+func GetClassBaseStats(classType ClassType) *Stats {
+	class := GetClass(classType)
+	if class == nil {
+		return NewStats()
+	}
+	return class.BaseStats()
+}
+
+func GetClassGrowthBias(classType ClassType) StatType {
+	class := GetClass(classType)
+	if class == nil {
+		return StatTypeSTR
+	}
+	return class.GrowthBias
+}
+
 func GetSkillData(skillType SkillType) *Skill {
 	return NewSkill(skillType)
 }

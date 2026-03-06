@@ -1,3 +1,6 @@
+//go:build raylib
+// +build raylib
+
 package game
 
 import (

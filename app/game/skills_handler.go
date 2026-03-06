@@ -75,7 +75,7 @@ func (g *Game) TryCastSkill(skill *gamedata.Skill, input *systems.Input) {
 				VX:     (dx / distance) * skill.Delivery.Speed,
 				VY:     (dy / distance) * skill.Delivery.Speed,
 				Speed:  skill.Delivery.Speed,
-				Damage: int(systems.ComputeDamage(skill.DamageSpec, g.Player.Stats)),
+				Damage: int(systems.ComputeDamage(skill.DamageSpec, g.Player.GetEffectiveStats())),
 				Radius: 5,
 				Alive:  true,
 				Skill:  skill,

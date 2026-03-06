@@ -20,6 +20,8 @@ type Player struct {
 	MaxMana               int
 	MoveSpeed             float32
 	AttackDamage          int
+	EffectiveStats        gamedata.Stats
+	DerivedStats          gamedata.DerivedStats
 	AttackRange           float32
 	HitFlashTimer         float32
 	Class                 *gamedata.Class
@@ -45,29 +47,29 @@ type Player struct {
 
 func NewPlayer(x, y float32, classType gamedata.ClassType) *Player {
 	class := gamedata.GetClassData(classType)
-	stats := gamedata.NewStats()
+	stats := gamedata.GetClassBaseStats(classType)
 
 	player := &Player{
 		Entity: core.Entity{
 			PosX:    x,
 			PosY:    y,
-			HP:      100,
-			MaxHP:   100,
+			HP:      gamedata.BasePlayerHP,
+			MaxHP:   gamedata.BasePlayerHP,
 			Stats:   stats,
 			Hitbox:  core.Hitbox{Width: 40, Height: 40},
 			Faction: core.FactionPlayer,
 			Alive:   true,
 		},
-		Mana:                  50,
-		MaxMana:               50,
-		MoveSpeed:             200,
-		AttackDamage:          10,
+		Mana:                  gamedata.BasePlayerMana,
+		MaxMana:               gamedata.BasePlayerMana,
+		MoveSpeed:             gamedata.BasePlayerMoveSpeed,
+		AttackDamage:          gamedata.BaseMeleeAutoAttackDamage,
 		AttackRange:           class.AttackRange,
 		HitFlashTimer:         0,
 		Class:                 class,
 		Level:                 1,
 		XP:                    0,
-		XPToNext:              100,
+		XPToNext:              gamedata.XPToNextLevel(1),
 		StatPoints:            0,
 		Equipment:             make(map[gamedata.ItemSlot]*gamedata.Item),
 		AttackCooldown:        1.0,
@@ -88,36 +90,29 @@ func NewPlayer(x, y float32, classType gamedata.ClassType) *Player {
 }
 
 func (p *Player) ApplyStats() {
-	baseStats := *p.Entity.Stats
-
-	for _, item := range p.Equipment {
-		if item != nil {
-			for statType, bonus := range item.StatBonuses {
-				baseStats.AddStat(statType, bonus)
-			}
-		}
+	if p.Entity.Stats == nil {
+		p.Entity.Stats = gamedata.NewStats()
 	}
 
-	p.MaxHP = baseStats.CalculateMaxHealth(100)
+	classType := gamedata.ClassTypeMelee
+	if p.Class != nil {
+		classType = p.Class.Type
+	}
+
+	p.EffectiveStats = gamedata.ComputeEffectiveStats(p.Entity.Stats, p.Equipment)
+	p.DerivedStats = gamedata.ComputeDerivedStats(classType, p.EffectiveStats)
+	p.MaxHP = p.DerivedStats.MaxHP
 	if p.HP > p.MaxHP {
 		p.HP = p.MaxHP
 	}
 
-	p.MaxMana = baseStats.CalculateMaxMana(50)
+	p.MaxMana = p.DerivedStats.MaxMana
 	if p.Mana > p.MaxMana {
 		p.Mana = p.MaxMana
 	}
 
-	p.MoveSpeed = baseStats.CalculateMoveSpeed(200)
-
-	switch p.Class.Type {
-	case gamedata.ClassTypeMelee:
-		p.AttackDamage = baseStats.CalculatePhysicalDamage(10)
-	case gamedata.ClassTypeRanged:
-		p.AttackDamage = baseStats.CalculateRangedDamage(10)
-	case gamedata.ClassTypeCaster:
-		p.AttackDamage = baseStats.CalculateMagicDamage(15)
-	}
+	p.MoveSpeed = p.DerivedStats.MoveSpeed
+	p.AttackDamage = p.DerivedStats.AutoAttackDamage
 }
 
 func (p *Player) EquipItem(item *gamedata.Item) {
@@ -162,17 +157,36 @@ func (p *Player) Update(deltaTime float32) {
 }
 
 func (p *Player) TakeDamage(damage int) {
-	p.takeDamageInternal(damage, true)
+	p.takeDamageInternal(damage, gamedata.DamagePhysical, true)
 }
 
 func (p *Player) TakeDamageWithoutFlash(damage int) {
-	p.takeDamageInternal(damage, false)
+	p.takeDamageInternal(damage, gamedata.DamagePhysical, false)
 }
 
-func (p *Player) takeDamageInternal(damage int, flash bool) {
+func (p *Player) TakeTypedDamage(damage int, damageType gamedata.DamageType) {
+	p.takeDamageInternal(damage, damageType, true)
+}
+
+func (p *Player) TakeTypedDamageWithoutFlash(damage int, damageType gamedata.DamageType) {
+	p.takeDamageInternal(damage, damageType, false)
+}
+
+func (p *Player) takeDamageInternal(damage int, damageType gamedata.DamageType, flash bool) {
+	if damage <= 0 {
+		return
+	}
+
 	if gamedata.HasEffect(&p.Entity.Effects, gamedata.EffectDamageReduction) {
 		magnitude := gamedata.GetEffectMagnitude(&p.Entity.Effects, gamedata.EffectDamageReduction)
 		damage = int(float32(damage) * (1.0 - magnitude))
+	}
+
+	switch damageType {
+	case gamedata.DamagePhysical:
+		damage = applyResistance(damage, p.DerivedStats.PhysicalResist)
+	case gamedata.DamageMagical:
+		damage = applyResistance(damage, p.DerivedStats.MagicalResist)
 	}
 
 	if p.ManaShieldActive && p.ManaShieldAmount > 0 {
@@ -225,12 +239,31 @@ func (p *Player) Heal(amount int) {
 }
 
 func (p *Player) GainXP(amount int) {
+	if amount <= 0 {
+		return
+	}
+
+	if p.Entity.Stats == nil {
+		p.Entity.Stats = gamedata.NewStats()
+	}
+
 	p.XP += amount
+	leveledUp := false
 	for p.XP >= p.XPToNext {
 		p.XP -= p.XPToNext
 		p.Level++
-		p.StatPoints += 3
-		p.XPToNext = p.Level * 100
+		p.StatPoints += gamedata.LevelUpStatPoints
+
+		if p.Class != nil {
+			p.Stats.AddStat(p.Class.GrowthBias, gamedata.LevelUpGrowthStatPoints)
+		}
+
+		p.XPToNext = gamedata.XPToNextLevel(p.Level)
+		leveledUp = true
+	}
+
+	if leveledUp {
+		p.ApplyStats()
 	}
 }
 
@@ -258,26 +291,29 @@ func (p *Player) UseMana(amount int) {
 }
 
 func (p *Player) GetAttackCooldown() float32 {
-	baseStats := *p.Entity.Stats
-	for _, item := range p.Equipment {
-		if item != nil {
-			for statType, bonus := range item.StatBonuses {
-				baseStats.AddStat(statType, bonus)
-			}
-		}
+	attackSpeed := p.DerivedStats.AttackSpeedMultiplier
+	if attackSpeed <= 0 {
+		return p.AttackCooldown
 	}
-	attackSpeed := baseStats.CalculateAttackSpeed(1.0)
 	return p.AttackCooldown / attackSpeed
 }
 
 func (p *Player) GetAutoAttackDamage() int {
-	baseStats := *p.Entity.Stats
-	for _, item := range p.Equipment {
-		if item != nil {
-			for statType, bonus := range item.StatBonuses {
-				baseStats.AddStat(statType, bonus)
-			}
-		}
+	return p.DerivedStats.AutoAttackDamage
+}
+
+func (p *Player) GetEffectiveStats() *gamedata.Stats {
+	return &p.EffectiveStats
+}
+
+func applyResistance(damage int, resistance float32) int {
+	if damage <= 0 {
+		return 0
 	}
-	return baseStats.CalculateAutoAttackDamage(p.AttackDamage)
+
+	mitigated := int(float32(damage) * (1.0 - resistance))
+	if mitigated < 1 {
+		return 1
+	}
+	return mitigated
 }

@@ -10,6 +10,13 @@ func TestDataAccessClassSkillEnemy(t *testing.T) {
 	if class.Name == "" {
 		t.Fatalf("expected class name to be populated")
 	}
+	baseStats := GetClassBaseStats(ClassTypeMelee)
+	if baseStats == nil {
+		t.Fatalf("expected class base stats, got nil")
+	}
+	if GetClassGrowthBias(ClassTypeMelee) != StatTypeSTR {
+		t.Fatalf("expected melee growth bias STR")
+	}
 
 	skill := GetSkillData(SkillTypePowerStrike)
 	if skill == nil {
