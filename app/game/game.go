@@ -42,6 +42,7 @@ type Game struct {
 	Camera                 *systems.Camera
 	Projectiles            []*Projectile
 	DelayedSkillEffects    []*DelayedSkillEffect
+	SkillVisualEffects     []*SkillVisualEffect
 	CurrentRoom            *world.Room
 	SelectedClass          gamedata.ClassType
 	LevelUpMenu            bool
@@ -82,14 +83,30 @@ type Projectile struct {
 }
 
 type DelayedSkillEffect struct {
-	X      float32
-	Y      float32
-	Radius float32
-	Delay  float32
-	Alive  bool
-	Skill  *gamedata.Skill
-	Caster *gameobjects.Player
-	Intent systems.CastIntent
+	X            float32
+	Y            float32
+	Radius       float32
+	Delay        float32
+	ActiveTime   float32
+	TickRate     float32
+	TickTimer    float32
+	Active       bool
+	Alive        bool
+	Skill        *gamedata.Skill
+	Caster       *gameobjects.Player
+	Intent       systems.CastIntent
+	LastAppliedX float32
+	LastAppliedY float32
+}
+
+type SkillVisualEffect struct {
+	X        float32
+	Y        float32
+	Radius   float32
+	Duration float32
+	TimeLeft float32
+	Skill    *gamedata.Skill
+	Filled   bool
 }
 
 func NewGame(cfg settings.Settings) *Game {
@@ -102,6 +119,7 @@ func NewGame(cfg settings.Settings) *Game {
 		Camera:                 systems.NewCamera(),
 		Projectiles:            []*Projectile{},
 		DelayedSkillEffects:    []*DelayedSkillEffect{},
+		SkillVisualEffects:     []*SkillVisualEffect{},
 		CurrentRoom:            nil,
 		SelectedClass:          gamedata.ClassTypeMelee,
 		LevelUpMenu:            false,
@@ -167,6 +185,11 @@ func (g *Game) updateBoot() {
 		)
 		manager.LoadFont(assets.FontDefault, "")
 		manager.LoadSound("sfx.ui.confirm", "resources/audio/ui_confirm.wav")
+		manager.LoadSound("sfx.skill.cast.melee", "resources/audio/skill_cast_melee.wav")
+		manager.LoadSound("sfx.skill.cast.ranged", "resources/audio/skill_cast_ranged.wav")
+		manager.LoadSound("sfx.skill.cast.caster", "resources/audio/skill_cast_caster.wav")
+		manager.LoadSound("sfx.skill.impact.physical", "resources/audio/skill_impact_physical.wav")
+		manager.LoadSound("sfx.skill.impact.magic", "resources/audio/skill_impact_magic.wav")
 		manager.LoadMusic("music.menu", "resources/audio/menu.ogg")
 		g.BootCompleted = true
 	}
@@ -246,6 +269,7 @@ func (g *Game) ResetState() {
 	g.Dungeon = nil
 	g.Projectiles = []*Projectile{}
 	g.DelayedSkillEffects = []*DelayedSkillEffect{}
+	g.SkillVisualEffects = []*SkillVisualEffect{}
 	g.CurrentRoom = nil
 	g.Camera = systems.NewCamera()
 	g.LevelUpMenu = false
@@ -333,6 +357,7 @@ func (g *Game) AdvanceToNextRoom() {
 	}
 	g.Projectiles = []*Projectile{}
 	g.DelayedSkillEffects = []*DelayedSkillEffect{}
+	g.SkillVisualEffects = []*SkillVisualEffect{}
 	g.RoomTransitionTimer = 0
 	g.PendingRoomTransition = false
 }
@@ -475,7 +500,18 @@ func (g *Game) drawRun() {
 		if delayed == nil || !delayed.Alive {
 			continue
 		}
-		systems.DrawDelayedTelegraph(delayed.X, delayed.Y, delayed.Radius, g.Camera)
+		if delayed.Active {
+			systems.DrawActiveSkillZone(delayed.X, delayed.Y, delayed.Radius, delayed.Skill, g.Camera)
+		} else {
+			systems.DrawDelayedTelegraph(delayed.X, delayed.Y, delayed.Radius, delayed.Skill, g.Camera)
+		}
+	}
+
+	for _, visual := range g.SkillVisualEffects {
+		if visual == nil || visual.TimeLeft <= 0 || visual.Duration <= 0 {
+			continue
+		}
+		systems.DrawSkillCastPulse(visual.X, visual.Y, visual.Radius, visual.TimeLeft/visual.Duration, visual.Skill, visual.Filled, g.Camera)
 	}
 
 	queue := make([]systems.RenderQueueItem, 0, len(g.Enemies)+len(g.Projectiles)+4)
@@ -492,7 +528,7 @@ func (g *Game) drawRun() {
 			DepthX:   depthX,
 			StableID: stableID,
 			Draw: func() {
-				systems.DrawProjectile(projectile.X, projectile.Y, projectile.Radius, g.Camera)
+				systems.DrawSkillProjectile(projectile.X, projectile.Y, projectile.Radius, projectile.Skill, g.Camera)
 			},
 		})
 		stableID++

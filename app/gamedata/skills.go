@@ -27,6 +27,9 @@ type Skill struct {
 	Delivery        DeliverySpec
 	DamageSpec      *DamageSpec
 	Effects         []EffectSpec
+	SelfMovement    SelfMovementSpec
+	ManaShield      ManaShieldSpec
+	ResourceGain    ResourceGainSpec
 }
 
 func NewSkill(skillType SkillType) *Skill {
@@ -122,9 +125,10 @@ func NewSkill(skillType SkillType) *Skill {
 				MaxTargets: 1,
 			},
 			Delivery: DeliverySpec{
-				Type:     DeliveryProjectile,
-				Speed:    500,
-				Lifetime: 1.2,
+				Type:             DeliveryProjectile,
+				Speed:            500,
+				Lifetime:         1.2,
+				ProjectileRadius: 5,
 			},
 			DamageSpec: &DamageSpec{
 				Base:       20,
@@ -143,6 +147,10 @@ func NewSkill(skillType SkillType) *Skill {
 			},
 			Delivery: DeliverySpec{
 				Type: DeliveryInstant,
+			},
+			SelfMovement: SelfMovementSpec{
+				Mode:     SelfMovementBackwardFromCursor,
+				Distance: 80,
 			},
 			Effects: []EffectSpec{
 				{Type: EffectMoveSpeedBoost, Duration: 2.0, Magnitude: 0.5},
@@ -177,10 +185,11 @@ func NewSkill(skillType SkillType) *Skill {
 				MaxTargets: 1,
 			},
 			Delivery: DeliverySpec{
-				Type:     DeliveryProjectile,
-				Speed:    400,
-				Lifetime: 1.4,
-				Pierce:   1,
+				Type:             DeliveryProjectile,
+				Speed:            400,
+				Lifetime:         1.4,
+				Pierce:           1,
+				ProjectileRadius: 6,
 			},
 			DamageSpec: &DamageSpec{
 				Base:       15,
@@ -188,7 +197,15 @@ func NewSkill(skillType SkillType) *Skill {
 				DamageType: DamagePhysical,
 			},
 			Effects: []EffectSpec{
-				{Type: EffectPoison, Duration: 5.0, Magnitude: 3.0, TickRate: 1.0},
+				{
+					Type:                EffectPoison,
+					Duration:            5.0,
+					Magnitude:           2.0,
+					TickRate:            1.0,
+					PercentMaxHPPerTick: 0.01,
+					MinTickDamage:       2,
+					MaxTickDamage:       12,
+				},
 			},
 		}
 	case SkillTypeArcaneBolt:
@@ -203,9 +220,10 @@ func NewSkill(skillType SkillType) *Skill {
 				MaxTargets: 1,
 			},
 			Delivery: DeliverySpec{
-				Type:     DeliveryProjectile,
-				Speed:    450,
-				Lifetime: 1.3,
+				Type:             DeliveryProjectile,
+				Speed:            450,
+				Lifetime:         1.3,
+				ProjectileRadius: 7,
 			},
 			DamageSpec: &DamageSpec{
 				Base:       40,
@@ -225,6 +243,10 @@ func NewSkill(skillType SkillType) *Skill {
 			Delivery: DeliverySpec{
 				Type: DeliveryInstant,
 			},
+			ManaShield: ManaShieldSpec{
+				AbsorbFromCurrentManaRatio: 0.6,
+				Duration:                   6.0,
+			},
 		}
 	case SkillTypeFrostField:
 		return &Skill{
@@ -239,11 +261,13 @@ func NewSkill(skillType SkillType) *Skill {
 				MaxTargets: 10,
 			},
 			Delivery: DeliverySpec{
-				Type:  DeliveryDelayed,
-				Delay: 0.8,
+				Type:         DeliveryDelayed,
+				Delay:        0.8,
+				ZoneDuration: 4.0,
+				ZoneTickRate: 1.0,
 			},
 			Effects: []EffectSpec{
-				{Type: EffectSlow, Duration: 4.0, Magnitude: 0.5},
+				{Type: EffectSlow, Duration: 1.2, Magnitude: 0.5},
 			},
 		}
 	case SkillTypeArcaneDrain:
@@ -264,6 +288,9 @@ func NewSkill(skillType SkillType) *Skill {
 				Base:       20,
 				Scaling:    map[StatType]float32{StatTypeINT: 1.0},
 				DamageType: DamageMagical,
+			},
+			ResourceGain: ResourceGainSpec{
+				ManaPerTarget: 10,
 			},
 		}
 	default:

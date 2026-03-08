@@ -112,3 +112,28 @@ func TestApplyCombatHitSupportsAutoAttackPath(t *testing.T) {
 		t.Fatalf("expected class lifesteal heal to hp 24, got %d", caster.HP)
 	}
 }
+
+func TestApplyCombatHitPoisonTipPercentMaxHPTickUsesCaps(t *testing.T) {
+	caster := gameobjects.NewPlayer(0, 0, gamedata.ClassTypeRanged)
+	enemy := gameobjects.NewEnemy(0, 0, false)
+	enemy.MaxHP = 5000
+	enemy.HP = 5000
+
+	poisonSpec := gamedata.NewSkill(gamedata.SkillTypePoisonTip).Effects[0]
+	ApplyCombatHit(CombatHitRequest{
+		Caster:             caster,
+		Target:             enemy,
+		Effects:            []gamedata.EffectSpec{poisonSpec},
+		ApplyOnHitHooks:    false,
+		UseSourceModifiers: false,
+	})
+
+	if !gamedata.HasEffect(&enemy.Effects, gamedata.EffectPoison) {
+		t.Fatalf("expected poison effect to be applied")
+	}
+
+	magnitude := gamedata.GetEffectMagnitude(&enemy.Effects, gamedata.EffectPoison)
+	if magnitude != float32(poisonSpec.MaxTickDamage) {
+		t.Fatalf("expected poison magnitude to clamp at max tick %d, got %.2f", poisonSpec.MaxTickDamage, magnitude)
+	}
+}

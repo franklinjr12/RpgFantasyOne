@@ -232,10 +232,50 @@ func DrawProjectile(x, y, radius float32, camera *Camera) {
 	rl.DrawCircle(int32(screenX), int32(screenY), radius, ProjectileColorRGBA)
 }
 
-func DrawDelayedTelegraph(x, y, radius float32, camera *Camera) {
+func DrawSkillProjectile(x, y, radius float32, skill *gamedata.Skill, camera *Camera) {
 	screenX, screenY := WorldToScreenIso(x, y, camera)
-	rl.DrawCircle(int32(screenX), int32(screenY), radius, rl.NewColor(120, 180, 255, 40))
-	rl.DrawCircleLines(int32(screenX), int32(screenY), radius, rl.NewColor(120, 180, 255, 220))
+	visualColor, visualRadius := skillVisualStyle(skill)
+	if radius <= 0 {
+		radius = visualRadius
+	}
+	rl.DrawCircle(int32(screenX), int32(screenY), radius, visualColor)
+}
+
+func DrawDelayedTelegraph(x, y, radius float32, skill *gamedata.Skill, camera *Camera) {
+	screenX, screenY := WorldToScreenIso(x, y, camera)
+	visualColor, _ := skillVisualStyle(skill)
+	telegraphFill := rl.NewColor(visualColor.R, visualColor.G, visualColor.B, 40)
+	telegraphOutline := rl.NewColor(visualColor.R, visualColor.G, visualColor.B, 220)
+	rl.DrawCircle(int32(screenX), int32(screenY), radius, telegraphFill)
+	rl.DrawCircleLines(int32(screenX), int32(screenY), radius, telegraphOutline)
+}
+
+func DrawActiveSkillZone(x, y, radius float32, skill *gamedata.Skill, camera *Camera) {
+	screenX, screenY := WorldToScreenIso(x, y, camera)
+	visualColor, _ := skillVisualStyle(skill)
+	zoneFill := rl.NewColor(visualColor.R, visualColor.G, visualColor.B, 70)
+	zoneOutline := rl.NewColor(visualColor.R, visualColor.G, visualColor.B, 255)
+	rl.DrawCircle(int32(screenX), int32(screenY), radius, zoneFill)
+	rl.DrawCircleLines(int32(screenX), int32(screenY), radius, zoneOutline)
+}
+
+func DrawSkillCastPulse(x, y, radius, remainingRatio float32, skill *gamedata.Skill, filled bool, camera *Camera) {
+	if remainingRatio < 0 {
+		remainingRatio = 0
+	}
+	if remainingRatio > 1 {
+		remainingRatio = 1
+	}
+	screenX, screenY := WorldToScreenIso(x, y, camera)
+	visualColor, _ := skillVisualStyle(skill)
+	pulseRadius := radius * (1 + (1-remainingRatio)*0.25)
+	if filled {
+		fill := rl.NewColor(visualColor.R, visualColor.G, visualColor.B, 60)
+		rl.DrawCircle(int32(screenX), int32(screenY), pulseRadius, fill)
+	}
+	outlineAlpha := uint8(120 + 135*remainingRatio)
+	outline := rl.NewColor(visualColor.R, visualColor.G, visualColor.B, outlineAlpha)
+	rl.DrawCircleLines(int32(screenX), int32(screenY), pulseRadius, outline)
 }
 
 func DrawBoss(boss *gameobjects.Boss, camera *Camera) {
@@ -268,6 +308,41 @@ func DrawBoss(boss *gameobjects.Boss, camera *Camera) {
 func DrawBossProjectile(x, y, radius float32, camera *Camera) {
 	screenX, screenY := WorldToScreenIso(x, y, camera)
 	rl.DrawCircle(int32(screenX), int32(screenY), radius, rl.Purple)
+}
+
+func skillVisualStyle(skill *gamedata.Skill) (rl.Color, float32) {
+	if skill == nil {
+		return ProjectileColorRGBA, 5
+	}
+
+	switch skill.Type {
+	case gamedata.SkillTypePowerStrike:
+		return rl.NewColor(232, 112, 44, 255), 9
+	case gamedata.SkillTypeGuardStance:
+		return rl.NewColor(80, 140, 210, 255), 10
+	case gamedata.SkillTypeBloodOath:
+		return rl.NewColor(180, 36, 36, 255), 9
+	case gamedata.SkillTypeShockwaveSlam:
+		return rl.NewColor(255, 165, 0, 255), 11
+	case gamedata.SkillTypeQuickShot:
+		return rl.NewColor(255, 232, 90, 255), 6
+	case gamedata.SkillTypeRetreatRoll:
+		return rl.NewColor(132, 212, 168, 255), 9
+	case gamedata.SkillTypeFocusedAim:
+		return rl.NewColor(255, 190, 56, 255), 9
+	case gamedata.SkillTypePoisonTip:
+		return rl.NewColor(92, 220, 96, 255), 7
+	case gamedata.SkillTypeArcaneBolt:
+		return rl.NewColor(86, 156, 255, 255), 8
+	case gamedata.SkillTypeManaShield:
+		return rl.NewColor(96, 220, 255, 255), 10
+	case gamedata.SkillTypeFrostField:
+		return rl.NewColor(120, 180, 255, 255), 10
+	case gamedata.SkillTypeArcaneDrain:
+		return rl.NewColor(180, 106, 255, 255), 10
+	default:
+		return ProjectileColorRGBA, 5
+	}
 }
 
 func GetDistance(x1, y1, x2, y2 float32) float32 {

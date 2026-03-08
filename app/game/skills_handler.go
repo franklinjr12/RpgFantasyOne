@@ -17,6 +17,8 @@ func (g *Game) TryCastSkill(skill *gamedata.Skill, input *systems.Input) {
 	if !g.executeSkillDelivery(skill, intent) {
 		return
 	}
+	g.spawnSkillCastVisual(skill, intent)
+	g.playSkillCastSFX(skill)
 	skill.Use()
 }
 
@@ -49,31 +51,57 @@ func (g *Game) resolveAndApplySkill(skill *gamedata.Skill, intent systems.CastIn
 	targets := systems.ResolveTargets(g.Player, intent, skill.Targeting, g.Enemies, g.Boss)
 	systems.ApplySkill(g.Player, skill, targets)
 	g.applySkillPostCast(skill, len(targets))
+	if len(targets) > 0 {
+		impactX, impactY := resolveImpactCenter(intent, targets[0])
+		g.spawnSkillImpactVisual(skill, impactX, impactY)
+		g.playSkillImpactSFX(skill)
+	}
 	return len(targets)
 }
 
 func (g *Game) applySkillPreCast(skill *gamedata.Skill, intent systems.CastIntent) {
-	switch skill.Type {
-	case gamedata.SkillTypeRetreatRoll:
-		g.applyRetreatRoll(intent)
-	case gamedata.SkillTypeManaShield:
-		g.Player.ManaShieldActive = true
-		g.Player.ManaShieldAmount = g.Player.Mana / 2
-	}
+	g.applySelfMovement(skill, intent)
+	g.applyManaShield(skill)
 }
 
 func (g *Game) applySkillPostCast(skill *gamedata.Skill, targetsHit int) {
-	switch skill.Type {
-	case gamedata.SkillTypeArcaneDrain:
-		manaRestore := targetsHit * 10
-		g.Player.Mana += manaRestore
-		if g.Player.Mana > g.Player.MaxMana {
-			g.Player.Mana = g.Player.MaxMana
-		}
+	if g == nil || g.Player == nil || skill == nil || targetsHit <= 0 {
+		return
+	}
+
+	manaRestore := targetsHit * skill.ResourceGain.ManaPerTarget
+	if manaRestore > 0 {
+		g.Player.GainMana(manaRestore)
 	}
 }
 
-func (g *Game) applyRetreatRoll(intent systems.CastIntent) {
+func (g *Game) applySelfMovement(skill *gamedata.Skill, intent systems.CastIntent) {
+	if g == nil || g.Player == nil || skill == nil {
+		return
+	}
+	if skill.SelfMovement.Mode != gamedata.SelfMovementBackwardFromCursor {
+		return
+	}
+	g.applyRetreatRoll(intent, skill.SelfMovement.Distance)
+}
+
+func (g *Game) applyManaShield(skill *gamedata.Skill) {
+	if g == nil || g.Player == nil || skill == nil {
+		return
+	}
+	ratio := skill.ManaShield.AbsorbFromCurrentManaRatio
+	if ratio <= 0 {
+		return
+	}
+
+	absorbAmount := int(float32(g.Player.Mana) * ratio)
+	if absorbAmount <= 0 {
+		return
+	}
+	g.Player.SetManaShield(absorbAmount, skill.ManaShield.Duration)
+}
+
+func (g *Game) applyRetreatRoll(intent systems.CastIntent, rollDistance float32) {
 	playerCenterX, playerCenterY := g.Player.Center()
 	dx := playerCenterX - intent.CursorX
 	dy := playerCenterY - intent.CursorY
@@ -81,8 +109,10 @@ func (g *Game) applyRetreatRoll(intent systems.CastIntent) {
 	if distance <= 0 {
 		return
 	}
+	if rollDistance <= 0 {
+		return
+	}
 
-	rollDistance := float32(80)
 	moveX := (dx / distance) * rollDistance
 	moveY := (dy / distance) * rollDistance
 	nextX, nextY := systems.ResolvePlayerMovement(
@@ -109,6 +139,10 @@ func (g *Game) spawnSkillProjectile(skill *gamedata.Skill, intent systems.CastIn
 	if lifetime <= 0 {
 		lifetime = 2.0
 	}
+	radius := skill.Delivery.ProjectileRadius
+	if radius <= 0 {
+		radius = 5
+	}
 
 	proj := &Projectile{
 		X:          playerCenterX,
@@ -117,7 +151,7 @@ func (g *Game) spawnSkillProjectile(skill *gamedata.Skill, intent systems.CastIn
 		VY:         intent.DirectionY * speed,
 		Speed:      speed,
 		Damage:     int(systems.ComputeDamage(skill.DamageSpec, g.Player.GetEffectiveStats())),
-		Radius:     5,
+		Radius:     radius,
 		Lifetime:   lifetime,
 		Pierce:     skill.Delivery.Pierce,
 		HitTargets: map[interface{}]struct{}{},
@@ -149,14 +183,19 @@ func (g *Game) queueDelayedSkill(skill *gamedata.Skill, intent systems.CastInten
 	}
 
 	delayed := &DelayedSkillEffect{
-		X:      centerX,
-		Y:      centerY,
-		Radius: radius,
-		Delay:  delay,
-		Alive:  true,
-		Skill:  skill,
-		Caster: g.Player,
-		Intent: updatedIntent,
+		X:            centerX,
+		Y:            centerY,
+		Radius:       radius,
+		Delay:        delay,
+		ActiveTime:   skill.Delivery.ZoneDuration,
+		TickRate:     skill.Delivery.ZoneTickRate,
+		Active:       false,
+		Alive:        true,
+		Skill:        skill,
+		Caster:       g.Player,
+		Intent:       updatedIntent,
+		LastAppliedX: centerX,
+		LastAppliedY: centerY,
 	}
 	g.DelayedSkillEffects = append(g.DelayedSkillEffects, delayed)
 	return true
@@ -184,4 +223,13 @@ func (g *Game) resolveDelayedCenter(skill *gamedata.Skill, intent systems.CastIn
 
 	ratio := skill.Targeting.Range / distance
 	return casterX + dx*ratio, casterY + dy*ratio
+}
+
+func resolveImpactCenter(intent systems.CastIntent, target interface{}) (float32, float32) {
+	switch t := target.(type) {
+	case interface{ Center() (float32, float32) }:
+		return t.Center()
+	default:
+		return intent.CursorX, intent.CursorY
+	}
 }

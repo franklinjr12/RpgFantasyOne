@@ -147,6 +147,17 @@ func (m *AssetManager) GetSound(key string) rl.Sound {
 	return rl.Sound{}
 }
 
+func (m *AssetManager) PlaySound(key string) {
+	if m == nil || !rl.IsAudioDeviceReady() {
+		return
+	}
+	sound, ok := m.sounds[key]
+	if !ok || sound.FrameCount <= 0 {
+		return
+	}
+	rl.PlaySound(sound)
+}
+
 func (m *AssetManager) GetMusic(key string) rl.Music {
 	if music, ok := m.music[key]; ok {
 		return music

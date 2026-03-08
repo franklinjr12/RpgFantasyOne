@@ -29,6 +29,7 @@ type Class struct {
 	LifestealPercent float32
 	KillHealAmount   int
 	ManaCost         int
+	ManaRegenPerSec  float32
 	ManaToHealthRate float32
 }
 
@@ -41,15 +42,17 @@ var classTable = map[ClassType]Class{
 		GrowthBias:       StatTypeSTR,
 		AttackRange:      50,
 		LifestealPercent: 0.2,
+		ManaRegenPerSec:  2.0,
 	},
 	ClassTypeRanged: {
-		Type:           ClassTypeRanged,
-		Name:           "Ranger",
-		PrimaryStat:    StatTypeDEX,
-		BaselineStats:  Stats{STR: 3, AGI: 8, VIT: 5, INT: 3, DEX: 8, LUK: 6},
-		GrowthBias:     StatTypeDEX,
-		AttackRange:    200,
-		KillHealAmount: 20,
+		Type:            ClassTypeRanged,
+		Name:            "Ranger",
+		PrimaryStat:     StatTypeDEX,
+		BaselineStats:   Stats{STR: 3, AGI: 8, VIT: 5, INT: 3, DEX: 8, LUK: 6},
+		GrowthBias:      StatTypeDEX,
+		AttackRange:     200,
+		KillHealAmount:  20,
+		ManaRegenPerSec: 2.5,
 	},
 	ClassTypeCaster: {
 		Type:             ClassTypeCaster,
@@ -59,6 +62,7 @@ var classTable = map[ClassType]Class{
 		GrowthBias:       StatTypeINT,
 		AttackRange:      150,
 		ManaCost:         10,
+		ManaRegenPerSec:  6.0,
 		ManaToHealthRate: 2.0,
 	},
 }

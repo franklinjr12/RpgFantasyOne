@@ -161,6 +161,8 @@
 - [ ] Class select screen (summary stats + skill previews)
 - [ ] Pause menu (Resume, Restart Run, Settings, Exit to Menu)
 - [ ] Results screen (time, rooms cleared, boss killed, build summary)
+- [ ] Icons
+- [ ] Skill effects
 
 ### In-Run HUD
 - [ ] Player HP bar + resource (mana/energy) bar

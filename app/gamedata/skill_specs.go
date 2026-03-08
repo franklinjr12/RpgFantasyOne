@@ -27,11 +27,14 @@ const (
 )
 
 type DeliverySpec struct {
-	Type     DeliveryType
-	Speed    float32
-	Delay    float32
-	Lifetime float32
-	Pierce   int
+	Type         DeliveryType
+	Speed        float32
+	Delay        float32
+	Lifetime     float32
+	Pierce       int
+	ProjectileRadius float32
+	ZoneDuration float32
+	ZoneTickRate float32
 }
 
 type DamageType int
@@ -51,8 +54,32 @@ type DamageSpec struct {
 }
 
 type EffectSpec struct {
-	Type      EffectType
-	Duration  float32
-	Magnitude float32
-	TickRate  float32
+	Type                EffectType
+	Duration            float32
+	Magnitude           float32
+	TickRate            float32
+	PercentMaxHPPerTick float32
+	MinTickDamage       int
+	MaxTickDamage       int
+}
+
+type SelfMovementMode int
+
+const (
+	SelfMovementNone SelfMovementMode = iota
+	SelfMovementBackwardFromCursor
+)
+
+type SelfMovementSpec struct {
+	Mode     SelfMovementMode
+	Distance float32
+}
+
+type ManaShieldSpec struct {
+	AbsorbFromCurrentManaRatio float32
+	Duration                   float32
+}
+
+type ResourceGainSpec struct {
+	ManaPerTarget int
 }

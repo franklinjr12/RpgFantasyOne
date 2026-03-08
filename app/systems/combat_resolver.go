@@ -124,10 +124,11 @@ func resolveDamageType(request CombatHitRequest) gamedata.DamageType {
 }
 
 func applyEffectSpecToTarget(target interface{}, effectSpec gamedata.EffectSpec) bool {
+	magnitude := resolveEffectMagnitude(target, effectSpec)
 	effect := gamedata.Effect{
 		Type:      effectSpec.Type,
 		Duration:  effectSpec.Duration,
-		Magnitude: effectSpec.Magnitude,
+		Magnitude: magnitude,
 		TickRate:  effectSpec.TickRate,
 	}
 
@@ -143,6 +144,41 @@ func applyEffectSpecToTarget(target interface{}, effectSpec gamedata.EffectSpec)
 		return true
 	default:
 		return false
+	}
+}
+
+func resolveEffectMagnitude(target interface{}, effectSpec gamedata.EffectSpec) float32 {
+	magnitude := effectSpec.Magnitude
+	if effectSpec.PercentMaxHPPerTick <= 0 {
+		return magnitude
+	}
+
+	maxHP := targetMaxHP(target)
+	if maxHP <= 0 {
+		return magnitude
+	}
+
+	magnitude += float32(maxHP) * effectSpec.PercentMaxHPPerTick
+
+	if effectSpec.MinTickDamage > 0 && magnitude < float32(effectSpec.MinTickDamage) {
+		magnitude = float32(effectSpec.MinTickDamage)
+	}
+	if effectSpec.MaxTickDamage > 0 && magnitude > float32(effectSpec.MaxTickDamage) {
+		magnitude = float32(effectSpec.MaxTickDamage)
+	}
+	return magnitude
+}
+
+func targetMaxHP(target interface{}) int {
+	switch t := target.(type) {
+	case *gameobjects.Player:
+		return t.MaxHP
+	case *gameobjects.Enemy:
+		return t.MaxHP
+	case *gameobjects.Boss:
+		return t.MaxHP
+	default:
+		return 0
 	}
 }
 

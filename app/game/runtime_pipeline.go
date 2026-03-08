@@ -2,6 +2,7 @@ package game
 
 import (
 	"math"
+	"sort"
 	"strings"
 
 	"singlefantasy/app/gamedata"
@@ -292,6 +293,8 @@ func (s *projectilesSystem) tryHitEnemy(g *Game, proj *Projectile, enemy *gameob
 	wasAlive := enemy.IsAlive()
 	s.applyProjectileHit(proj, enemy)
 	markProjectileTargetHit(proj, enemy)
+	g.spawnSkillImpactVisual(proj.Skill, enemyX, enemyY)
+	g.playSkillImpactSFX(proj.Skill)
 	if wasAlive && !enemy.IsAlive() {
 		g.Player.GainXP(20)
 		if g.Player.Class.Type == gamedata.ClassTypeRanged {
@@ -321,6 +324,8 @@ func (s *projectilesSystem) tryHitBoss(g *Game, proj *Projectile, boss *gameobje
 	wasAlive := boss.IsAlive()
 	s.applyProjectileHit(proj, boss)
 	markProjectileTargetHit(proj, boss)
+	g.spawnSkillImpactVisual(proj.Skill, bossX, bossY)
+	g.playSkillImpactSFX(proj.Skill)
 	if wasAlive && !boss.IsAlive() {
 		g.Player.GainXP(100)
 		if g.Player.Class.Type == gamedata.ClassTypeRanged {
@@ -361,20 +366,138 @@ func (s *projectilesSystem) updateDelayedSkillEffects(g *Game, dt float32) {
 			continue
 		}
 
-		delayed.Delay -= dt
-		if delayed.Delay > 0 {
+		if !delayed.Active {
+			delayed.Delay -= dt
+			if delayed.Delay > 0 {
+				continue
+			}
+			delayed.Active = true
+
+			targetsHit := s.applyDelayedSkill(g, delayed)
+			if targetsHit > 0 {
+				g.spawnSkillImpactVisual(delayed.Skill, delayed.LastAppliedX, delayed.LastAppliedY)
+				g.playSkillImpactSFX(delayed.Skill)
+			}
+
+			if delayed.ActiveTime <= 0 || delayed.TickRate <= 0 {
+				delayed.Alive = false
+				g.DelayedSkillEffects = append(g.DelayedSkillEffects[:i], g.DelayedSkillEffects[i+1:]...)
+				continue
+			}
+		}
+
+		if delayed.ActiveTime <= 0 {
+			delayed.Alive = false
+			g.DelayedSkillEffects = append(g.DelayedSkillEffects[:i], g.DelayedSkillEffects[i+1:]...)
 			continue
 		}
 
-		if delayed.Skill != nil && delayed.Caster != nil {
-			targets := systems.ResolveTargets(delayed.Caster, delayed.Intent, delayed.Skill.Targeting, g.Enemies, g.Boss)
-			systems.ApplySkill(delayed.Caster, delayed.Skill, targets)
-			g.applySkillPostCast(delayed.Skill, len(targets))
+		delayed.ActiveTime -= dt
+		delayed.TickTimer += dt
+		for delayed.TickTimer >= delayed.TickRate && delayed.ActiveTime > 0 {
+			delayed.TickTimer -= delayed.TickRate
+			targetsHit := s.applyDelayedSkill(g, delayed)
+			if targetsHit > 0 {
+				g.spawnSkillImpactVisual(delayed.Skill, delayed.LastAppliedX, delayed.LastAppliedY)
+				g.playSkillImpactSFX(delayed.Skill)
+			}
 		}
 
-		delayed.Alive = false
-		g.DelayedSkillEffects = append(g.DelayedSkillEffects[:i], g.DelayedSkillEffects[i+1:]...)
+		if delayed.ActiveTime <= 0 {
+			delayed.Alive = false
+			g.DelayedSkillEffects = append(g.DelayedSkillEffects[:i], g.DelayedSkillEffects[i+1:]...)
+		}
 	}
+}
+
+func (s *projectilesSystem) applyDelayedSkill(g *Game, delayed *DelayedSkillEffect) int {
+	if g == nil || delayed == nil || delayed.Skill == nil || delayed.Caster == nil {
+		return 0
+	}
+	targets := s.resolveDelayedTargets(g, delayed)
+	systems.ApplySkill(delayed.Caster, delayed.Skill, targets)
+	g.applySkillPostCast(delayed.Skill, len(targets))
+	delayed.LastAppliedX = delayed.X
+	delayed.LastAppliedY = delayed.Y
+	return len(targets)
+}
+
+func (s *projectilesSystem) resolveDelayedTargets(g *Game, delayed *DelayedSkillEffect) []interface{} {
+	if delayed.Skill.Targeting.Type != gamedata.TargetArea {
+		return systems.ResolveTargets(delayed.Caster, delayed.Intent, delayed.Skill.Targeting, g.Enemies, g.Boss)
+	}
+
+	radius := delayed.Skill.Targeting.Radius
+	if radius <= 0 {
+		radius = delayed.Radius
+	}
+	if radius <= 0 {
+		return nil
+	}
+
+	type candidate struct {
+		target    interface{}
+		distance2 float32
+		order     int
+	}
+
+	centerX := delayed.X
+	centerY := delayed.Y
+	radius2 := radius * radius
+	candidates := make([]candidate, 0, len(g.Enemies)+1)
+	order := 0
+
+	for _, enemy := range g.Enemies {
+		if enemy == nil || !enemy.IsAlive() {
+			order++
+			continue
+		}
+		targetX, targetY := enemy.Center()
+		dx := targetX - centerX
+		dy := targetY - centerY
+		distance2 := dx*dx + dy*dy
+		if distance2 <= radius2 {
+			candidates = append(candidates, candidate{
+				target:    enemy,
+				distance2: distance2,
+				order:     order,
+			})
+		}
+		order++
+	}
+
+	if g.Boss != nil && g.Boss.IsAlive() {
+		targetX, targetY := g.Boss.Center()
+		dx := targetX - centerX
+		dy := targetY - centerY
+		distance2 := dx*dx + dy*dy
+		if distance2 <= radius2 {
+			candidates = append(candidates, candidate{
+				target:    g.Boss,
+				distance2: distance2,
+				order:     order,
+			})
+		}
+	}
+
+	sort.SliceStable(candidates, func(i, j int) bool {
+		if candidates[i].distance2 == candidates[j].distance2 {
+			return candidates[i].order < candidates[j].order
+		}
+		return candidates[i].distance2 < candidates[j].distance2
+	})
+
+	limit := len(candidates)
+	maxTargets := delayed.Skill.Targeting.MaxTargets
+	if maxTargets > 0 && maxTargets < limit {
+		limit = maxTargets
+	}
+
+	targets := make([]interface{}, 0, limit)
+	for i := 0; i < limit; i++ {
+		targets = append(targets, candidates[i].target)
+	}
+	return targets
 }
 
 func markProjectileTargetHit(proj *Projectile, target interface{}) {
@@ -524,6 +647,11 @@ func (s *effectsSystem) Name() string { return "Effects" }
 
 func (s *effectsSystem) Update(ctx *RuntimeContext, dt float32) {
 	g := ctx.Game
+	if g == nil {
+		return
+	}
+
+	g.updateSkillVisualEffects(dt)
 	if ctx.IsMenuOpen || g.Player == nil {
 		return
 	}

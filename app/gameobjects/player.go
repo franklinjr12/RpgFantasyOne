@@ -32,6 +32,7 @@ type Player struct {
 	Skills                []*gamedata.Skill
 	ManaShieldActive      bool
 	ManaShieldAmount      int
+	ManaShieldTimeLeft    float32
 	Equipment             map[gamedata.ItemSlot]*gamedata.Item
 	AttackCooldown        float32
 	CurrentAttackCooldown float32
@@ -43,6 +44,7 @@ type Player struct {
 	HurtIFrameTimer       float32
 	KnockbackVelX         float32
 	KnockbackVelY         float32
+	ManaRegenRemainder    float32
 }
 
 func NewPlayer(x, y float32, classType gamedata.ClassType) *Player {
@@ -82,6 +84,7 @@ func NewPlayer(x, y float32, classType gamedata.ClassType) *Player {
 		HurtIFrameTimer:       0,
 		KnockbackVelX:         0,
 		KnockbackVelY:         0,
+		ManaRegenRemainder:    0,
 	}
 
 	player.ApplyStats()
@@ -142,18 +145,22 @@ func (p *Player) Update(deltaTime float32) {
 		}
 	}
 
+	if p.ManaShieldActive && p.ManaShieldTimeLeft > 0 {
+		p.ManaShieldTimeLeft -= deltaTime
+		if p.ManaShieldTimeLeft <= 0 {
+			p.ManaShieldTimeLeft = 0
+			p.ManaShieldAmount = 0
+			p.ManaShieldActive = false
+		}
+	}
+
 	for _, skill := range p.Skills {
 		skill.Update(deltaTime)
 	}
 
 	gamedata.UpdateEffects(&p.Entity.Effects, deltaTime, p.TakeDamage)
 
-	if p.Mana < p.MaxMana {
-		p.Mana += int(deltaTime * 5)
-		if p.Mana > p.MaxMana {
-			p.Mana = p.MaxMana
-		}
-	}
+	p.regenerateMana(deltaTime)
 }
 
 func (p *Player) TakeDamage(damage int) {
@@ -201,6 +208,7 @@ func (p *Player) takeDamageInternal(damage int, damageType gamedata.DamageType, 
 			damage -= p.ManaShieldAmount
 			p.ManaShieldAmount = 0
 			p.ManaShieldActive = false
+			p.ManaShieldTimeLeft = 0
 		}
 	}
 
@@ -295,6 +303,33 @@ func (p *Player) UseMana(amount int) {
 	}
 }
 
+func (p *Player) GainMana(amount int) {
+	if amount <= 0 {
+		return
+	}
+	p.Mana += amount
+	if p.Mana > p.MaxMana {
+		p.Mana = p.MaxMana
+	}
+}
+
+func (p *Player) SetManaShield(amount int, duration float32) {
+	if amount <= 0 {
+		p.ManaShieldAmount = 0
+		p.ManaShieldTimeLeft = 0
+		p.ManaShieldActive = false
+		return
+	}
+
+	p.ManaShieldAmount = amount
+	p.ManaShieldActive = true
+	if duration > 0 {
+		p.ManaShieldTimeLeft = duration
+	} else {
+		p.ManaShieldTimeLeft = 0
+	}
+}
+
 func (p *Player) GetAttackCooldown() float32 {
 	attackSpeed := p.DerivedStats.AttackSpeedMultiplier
 	if attackSpeed <= 0 {
@@ -321,4 +356,28 @@ func applyResistance(damage int, resistance float32) int {
 		return 1
 	}
 	return mitigated
+}
+
+func (p *Player) regenerateMana(deltaTime float32) {
+	if p == nil || deltaTime <= 0 {
+		return
+	}
+	if p.Mana >= p.MaxMana {
+		p.ManaRegenRemainder = 0
+		return
+	}
+
+	regenPerSec := float32(2)
+	if p.Class != nil && p.Class.ManaRegenPerSec > 0 {
+		regenPerSec = p.Class.ManaRegenPerSec
+	}
+
+	p.ManaRegenRemainder += deltaTime * regenPerSec
+	wholePoints := int(p.ManaRegenRemainder)
+	if wholePoints <= 0 {
+		return
+	}
+
+	p.ManaRegenRemainder -= float32(wholePoints)
+	p.GainMana(wholePoints)
 }
