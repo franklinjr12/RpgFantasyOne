@@ -232,6 +232,12 @@ func DrawProjectile(x, y, radius float32, camera *Camera) {
 	rl.DrawCircle(int32(screenX), int32(screenY), radius, ProjectileColorRGBA)
 }
 
+func DrawDelayedTelegraph(x, y, radius float32, camera *Camera) {
+	screenX, screenY := WorldToScreenIso(x, y, camera)
+	rl.DrawCircle(int32(screenX), int32(screenY), radius, rl.NewColor(120, 180, 255, 40))
+	rl.DrawCircleLines(int32(screenX), int32(screenY), radius, rl.NewColor(120, 180, 255, 220))
+}
+
 func DrawBoss(boss *gameobjects.Boss, camera *Camera) {
 	if !boss.IsAlive() {
 		return

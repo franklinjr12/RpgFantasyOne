@@ -41,6 +41,7 @@ type Game struct {
 	Dungeon                *world.Dungeon
 	Camera                 *systems.Camera
 	Projectiles            []*Projectile
+	DelayedSkillEffects    []*DelayedSkillEffect
 	CurrentRoom            *world.Room
 	SelectedClass          gamedata.ClassType
 	LevelUpMenu            bool
@@ -64,16 +65,30 @@ type Game struct {
 }
 
 type Projectile struct {
+	X          float32
+	Y          float32
+	VX         float32
+	VY         float32
+	Speed      float32
+	Damage     int
+	Radius     float32
+	Lifetime   float32
+	Pierce     int
+	HitTargets map[interface{}]struct{}
+	Alive      bool
+	Skill      *gamedata.Skill
+	Caster     *gameobjects.Player
+}
+
+type DelayedSkillEffect struct {
 	X      float32
 	Y      float32
-	VX     float32
-	VY     float32
-	Speed  float32
-	Damage int
 	Radius float32
+	Delay  float32
 	Alive  bool
 	Skill  *gamedata.Skill
 	Caster *gameobjects.Player
+	Intent systems.CastIntent
 }
 
 func NewGame(cfg settings.Settings) *Game {
@@ -85,6 +100,7 @@ func NewGame(cfg settings.Settings) *Game {
 		Dungeon:                nil,
 		Camera:                 systems.NewCamera(),
 		Projectiles:            []*Projectile{},
+		DelayedSkillEffects:    []*DelayedSkillEffect{},
 		CurrentRoom:            nil,
 		SelectedClass:          gamedata.ClassTypeMelee,
 		LevelUpMenu:            false,
@@ -228,6 +244,7 @@ func (g *Game) ResetState() {
 	g.Boss = nil
 	g.Dungeon = nil
 	g.Projectiles = []*Projectile{}
+	g.DelayedSkillEffects = []*DelayedSkillEffect{}
 	g.CurrentRoom = nil
 	g.Camera = systems.NewCamera()
 	g.LevelUpMenu = false
@@ -314,6 +331,7 @@ func (g *Game) AdvanceToNextRoom() {
 		g.CurrentRoom.SetDoorsLocked(true)
 	}
 	g.Projectiles = []*Projectile{}
+	g.DelayedSkillEffects = []*DelayedSkillEffect{}
 	g.RoomTransitionTimer = 0
 	g.PendingRoomTransition = false
 }
@@ -450,6 +468,13 @@ func (g *Game) drawRun() {
 		for _, room := range g.Dungeon.Rooms {
 			systems.DrawRoom(room, g.Camera)
 		}
+	}
+
+	for _, delayed := range g.DelayedSkillEffects {
+		if delayed == nil || !delayed.Alive {
+			continue
+		}
+		systems.DrawDelayedTelegraph(delayed.X, delayed.Y, delayed.Radius, g.Camera)
 	}
 
 	queue := make([]systems.RenderQueueItem, 0, len(g.Enemies)+len(g.Projectiles)+4)
@@ -734,6 +759,13 @@ func (g *Game) GetDebugLines() []string {
 		lines = append(lines, fmt.Sprintf("Room: %d/%d", roomIndex, totalRooms))
 		lines = append(lines, fmt.Sprintf("Enemies (alive/total): %d/%d", aliveEnemies, len(g.Enemies)))
 		lines = append(lines, fmt.Sprintf("Projectiles (player/boss): %d/%d", activeProjectiles, bossProjectiles))
+		activeDelayed := 0
+		for _, delayed := range g.DelayedSkillEffects {
+			if delayed != nil && delayed.Alive {
+				activeDelayed++
+			}
+		}
+		lines = append(lines, fmt.Sprintf("Delayed skill effects: %d", activeDelayed))
 		if g.RunPipeline != nil {
 			lines = append(lines, fmt.Sprintf("Pipeline: %s", g.RunPipeline.OrderString()))
 		}

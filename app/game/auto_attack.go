@@ -164,14 +164,17 @@ func (g *Game) resolveRangedAutoAttack(damage int) {
 	}
 
 	proj := &Projectile{
-		X:      playerCenterX,
-		Y:      playerCenterY,
-		VX:     (dx / distance) * AutoAttackProjectileSpeed,
-		VY:     (dy / distance) * AutoAttackProjectileSpeed,
-		Speed:  AutoAttackProjectileSpeed,
-		Damage: damage,
-		Radius: 5,
-		Alive:  true,
+		X:          playerCenterX,
+		Y:          playerCenterY,
+		VX:         (dx / distance) * AutoAttackProjectileSpeed,
+		VY:         (dy / distance) * AutoAttackProjectileSpeed,
+		Speed:      AutoAttackProjectileSpeed,
+		Damage:     damage,
+		Radius:     5,
+		Lifetime:   2.0,
+		Pierce:     0,
+		HitTargets: map[interface{}]struct{}{},
+		Alive:      true,
 	}
 	g.Projectiles = append(g.Projectiles, proj)
 }

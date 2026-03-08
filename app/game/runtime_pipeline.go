@@ -102,8 +102,8 @@ func (s *inputSystem) Update(ctx *RuntimeContext, _ float32) {
 		return
 	}
 
-	mouseX, mouseY := systems.GetMousePosition()
-	worldX, worldY := systems.ScreenToWorldIso(mouseX, mouseY, g.Camera)
+	worldX := ctx.Input.CursorWorldX
+	worldY := ctx.Input.CursorWorldY
 
 	for _, enemy := range g.Enemies {
 		if !enemy.IsAlive() {
@@ -168,6 +168,9 @@ func (s *castingSystem) Update(ctx *RuntimeContext, _ float32) {
 	if g.Player == nil || ctx.Input == nil {
 		return
 	}
+	if ctx.IsMenuOpen {
+		return
+	}
 
 	skillInputs := []bool{ctx.Input.Skill1, ctx.Input.Skill2, ctx.Input.Skill3, ctx.Input.Skill4}
 	for i, skillPressed := range skillInputs {
@@ -175,9 +178,6 @@ func (s *castingSystem) Update(ctx *RuntimeContext, _ float32) {
 			continue
 		}
 		skill := g.Player.Skills[i]
-		if !systems.CanCast(g.Player, skill) {
-			continue
-		}
 		g.PlayerAttackTarget = nil
 		g.TryCastSkill(skill, ctx.Input)
 	}
@@ -194,7 +194,7 @@ func (s *projectilesSystem) Update(ctx *RuntimeContext, dt float32) {
 	}
 
 	s.updateBossProjectiles(g, dt)
-	s.resolveBossHits(g)
+	s.updateDelayedSkillEffects(g, dt)
 	s.updatePlayerProjectiles(g, dt)
 }
 
@@ -229,40 +229,6 @@ func (s *projectilesSystem) updateBossProjectiles(g *Game, dt float32) {
 	}
 }
 
-func (s *projectilesSystem) resolveBossHits(g *Game) {
-	if g.Boss == nil || !g.Boss.IsAlive() {
-		return
-	}
-
-	for _, proj := range g.Projectiles {
-		if !proj.Alive {
-			continue
-		}
-
-		bossX, bossY := g.Boss.Center()
-		distance := systems.GetDistance(proj.X, proj.Y, bossX, bossY)
-		if distance > proj.Radius+g.Boss.Hitbox.Width/2 {
-			continue
-		}
-
-		wasAlive := g.Boss.IsAlive()
-		if proj.Skill != nil && proj.Caster != nil {
-			systems.ApplySkill(proj.Caster, proj.Skill, []interface{}{g.Boss})
-		} else {
-			g.Boss.TakeDamage(proj.Damage)
-		}
-		proj.Alive = false
-
-		if wasAlive && !g.Boss.IsAlive() {
-			g.Player.GainXP(100)
-			if g.Player.Class.Type == gamedata.ClassTypeRanged {
-				g.Player.Heal(g.Player.Class.KillHealAmount * 5)
-			}
-		}
-		break
-	}
-}
-
 func (s *projectilesSystem) updatePlayerProjectiles(g *Game, dt float32) {
 	for i := len(g.Projectiles) - 1; i >= 0; i-- {
 		proj := g.Projectiles[i]
@@ -271,36 +237,17 @@ func (s *projectilesSystem) updatePlayerProjectiles(g *Game, dt float32) {
 			continue
 		}
 
+		proj.Lifetime -= dt
+		if proj.Lifetime <= 0 {
+			proj.Alive = false
+			g.Projectiles = append(g.Projectiles[:i], g.Projectiles[i+1:]...)
+			continue
+		}
+
 		proj.X += proj.VX * dt
 		proj.Y += proj.VY * dt
 
-		for _, enemy := range g.Enemies {
-			if !enemy.IsAlive() {
-				continue
-			}
-
-			enemyX, enemyY := enemy.Center()
-			distance := systems.GetDistance(proj.X, proj.Y, enemyX, enemyY)
-			if distance > proj.Radius+enemy.Hitbox.Width/2 {
-				continue
-			}
-
-			wasAlive := enemy.IsAlive()
-			if proj.Skill != nil && proj.Caster != nil {
-				systems.ApplySkill(proj.Caster, proj.Skill, []interface{}{enemy})
-			} else {
-				enemy.TakeDamage(proj.Damage)
-			}
-			proj.Alive = false
-
-			if wasAlive && !enemy.IsAlive() {
-				g.Player.GainXP(20)
-				if g.Player.Class.Type == gamedata.ClassTypeRanged {
-					g.Player.Heal(g.Player.Class.KillHealAmount)
-				}
-			}
-			break
-		}
+		s.resolvePlayerProjectileHits(g, proj)
 
 		if g.CurrentRoom != nil {
 			if proj.X < g.CurrentRoom.X || proj.X > g.CurrentRoom.X+g.CurrentRoom.Width ||
@@ -308,7 +255,138 @@ func (s *projectilesSystem) updatePlayerProjectiles(g *Game, dt float32) {
 				proj.Alive = false
 			}
 		}
+
+		if !proj.Alive {
+			g.Projectiles = append(g.Projectiles[:i], g.Projectiles[i+1:]...)
+		}
 	}
+}
+
+func (s *projectilesSystem) resolvePlayerProjectileHits(g *Game, proj *Projectile) {
+	for _, enemy := range g.Enemies {
+		if enemy == nil || !enemy.IsAlive() || !proj.Alive {
+			continue
+		}
+		if s.tryHitEnemy(g, proj, enemy) {
+			return
+		}
+	}
+
+	if g.Boss == nil || !g.Boss.IsAlive() || !proj.Alive {
+		return
+	}
+	s.tryHitBoss(g, proj, g.Boss)
+}
+
+func (s *projectilesSystem) tryHitEnemy(g *Game, proj *Projectile, enemy *gameobjects.Enemy) bool {
+	if wasTargetHitByProjectile(proj, enemy) {
+		return false
+	}
+
+	enemyX, enemyY := enemy.Center()
+	distance := systems.GetDistance(proj.X, proj.Y, enemyX, enemyY)
+	if distance > proj.Radius+enemy.Hitbox.Width/2 {
+		return false
+	}
+
+	wasAlive := enemy.IsAlive()
+	s.applyProjectileHit(proj, enemy)
+	markProjectileTargetHit(proj, enemy)
+	if wasAlive && !enemy.IsAlive() {
+		g.Player.GainXP(20)
+		if g.Player.Class.Type == gamedata.ClassTypeRanged {
+			g.Player.Heal(g.Player.Class.KillHealAmount)
+		}
+	}
+
+	if proj.Pierce > 0 {
+		proj.Pierce--
+		return false
+	}
+	proj.Alive = false
+	return true
+}
+
+func (s *projectilesSystem) tryHitBoss(g *Game, proj *Projectile, boss *gameobjects.Boss) bool {
+	if wasTargetHitByProjectile(proj, boss) {
+		return false
+	}
+
+	bossX, bossY := boss.Center()
+	distance := systems.GetDistance(proj.X, proj.Y, bossX, bossY)
+	if distance > proj.Radius+boss.Hitbox.Width/2 {
+		return false
+	}
+
+	wasAlive := boss.IsAlive()
+	s.applyProjectileHit(proj, boss)
+	markProjectileTargetHit(proj, boss)
+	if wasAlive && !boss.IsAlive() {
+		g.Player.GainXP(100)
+		if g.Player.Class.Type == gamedata.ClassTypeRanged {
+			g.Player.Heal(g.Player.Class.KillHealAmount * 5)
+		}
+	}
+
+	if proj.Pierce > 0 {
+		proj.Pierce--
+		return false
+	}
+	proj.Alive = false
+	return true
+}
+
+func (s *projectilesSystem) applyProjectileHit(proj *Projectile, target interface{}) {
+	if proj.Skill != nil && proj.Caster != nil {
+		systems.ApplySkill(proj.Caster, proj.Skill, []interface{}{target})
+		return
+	}
+
+	switch t := target.(type) {
+	case *gameobjects.Enemy:
+		t.TakeDamage(proj.Damage)
+	case *gameobjects.Boss:
+		t.TakeDamage(proj.Damage)
+	}
+}
+
+func (s *projectilesSystem) updateDelayedSkillEffects(g *Game, dt float32) {
+	for i := len(g.DelayedSkillEffects) - 1; i >= 0; i-- {
+		delayed := g.DelayedSkillEffects[i]
+		if delayed == nil || !delayed.Alive {
+			g.DelayedSkillEffects = append(g.DelayedSkillEffects[:i], g.DelayedSkillEffects[i+1:]...)
+			continue
+		}
+
+		delayed.Delay -= dt
+		if delayed.Delay > 0 {
+			continue
+		}
+
+		if delayed.Skill != nil && delayed.Caster != nil {
+			targets := systems.ResolveTargets(delayed.Caster, delayed.Intent, delayed.Skill.Targeting, g.Enemies, g.Boss)
+			systems.ApplySkill(delayed.Caster, delayed.Skill, targets)
+			g.applySkillPostCast(delayed.Skill, len(targets))
+		}
+
+		delayed.Alive = false
+		g.DelayedSkillEffects = append(g.DelayedSkillEffects[:i], g.DelayedSkillEffects[i+1:]...)
+	}
+}
+
+func markProjectileTargetHit(proj *Projectile, target interface{}) {
+	if proj.HitTargets == nil {
+		proj.HitTargets = map[interface{}]struct{}{}
+	}
+	proj.HitTargets[target] = struct{}{}
+}
+
+func wasTargetHitByProjectile(proj *Projectile, target interface{}) bool {
+	if proj.HitTargets == nil {
+		return false
+	}
+	_, hit := proj.HitTargets[target]
+	return hit
 }
 
 type movementSystem struct{}

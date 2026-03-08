@@ -93,9 +93,10 @@ func NewSkill(skillType SkillType) *Skill {
 			Cooldown: 17.0,
 			ManaCost: 0,
 			Targeting: TargetingSpec{
-				Type:       TargetArea,
-				Radius:     100,
-				MaxTargets: 10,
+				Type:                  TargetDirection,
+				Range:                 110,
+				MaxTargets:            10,
+				DirectionalArcDegrees: 90,
 			},
 			Delivery: DeliverySpec{
 				Type: DeliveryInstant,
@@ -121,8 +122,9 @@ func NewSkill(skillType SkillType) *Skill {
 				MaxTargets: 1,
 			},
 			Delivery: DeliverySpec{
-				Type:  DeliveryProjectile,
-				Speed: 500,
+				Type:     DeliveryProjectile,
+				Speed:    500,
+				Lifetime: 1.2,
 			},
 			DamageSpec: &DamageSpec{
 				Base:       20,
@@ -175,8 +177,10 @@ func NewSkill(skillType SkillType) *Skill {
 				MaxTargets: 1,
 			},
 			Delivery: DeliverySpec{
-				Type:  DeliveryProjectile,
-				Speed: 400,
+				Type:     DeliveryProjectile,
+				Speed:    400,
+				Lifetime: 1.4,
+				Pierce:   1,
 			},
 			DamageSpec: &DamageSpec{
 				Base:       15,
@@ -199,8 +203,9 @@ func NewSkill(skillType SkillType) *Skill {
 				MaxTargets: 1,
 			},
 			Delivery: DeliverySpec{
-				Type:  DeliveryProjectile,
-				Speed: 450,
+				Type:     DeliveryProjectile,
+				Speed:    450,
+				Lifetime: 1.3,
 			},
 			DamageSpec: &DamageSpec{
 				Base:       40,
@@ -229,11 +234,13 @@ func NewSkill(skillType SkillType) *Skill {
 			ManaCost: 25,
 			Targeting: TargetingSpec{
 				Type:       TargetArea,
+				Range:      180,
 				Radius:     120,
 				MaxTargets: 10,
 			},
 			Delivery: DeliverySpec{
-				Type: DeliveryInstant,
+				Type:  DeliveryDelayed,
+				Delay: 0.8,
 			},
 			Effects: []EffectSpec{
 				{Type: EffectSlow, Duration: 4.0, Magnitude: 0.5},

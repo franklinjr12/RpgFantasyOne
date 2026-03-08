@@ -6,13 +6,16 @@ const (
 	TargetSelf TargetType = iota
 	TargetEnemy
 	TargetArea
+	TargetDirection
 )
 
 type TargetingSpec struct {
-	Type       TargetType
-	Range      float32
-	Radius     float32
-	MaxTargets int
+	Type                  TargetType
+	Range                 float32
+	Radius                float32
+	MaxTargets            int
+	DirectionalArcDegrees float32
+	DirectionalLineWidth  float32
 }
 
 type DeliveryType int
@@ -28,6 +31,7 @@ type DeliverySpec struct {
 	Speed    float32
 	Delay    float32
 	Lifetime float32
+	Pierce   int
 }
 
 type DamageType int

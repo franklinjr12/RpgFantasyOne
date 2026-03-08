@@ -6,6 +6,8 @@ type Input struct {
 	MoveToX       float32
 	MoveToY       float32
 	HasMoveTarget bool
+	CursorWorldX  float32
+	CursorWorldY  float32
 	Attack        bool
 	Skill1        bool
 	Skill2        bool
@@ -14,13 +16,16 @@ type Input struct {
 }
 
 func UpdateInput(camera *Camera) *Input {
+	mouseX, mouseY := GetMousePosition()
+	cursorWorldX, cursorWorldY := ScreenToWorldIso(mouseX, mouseY, camera)
+
 	moveToX := float32(0)
 	moveToY := float32(0)
 	hasMoveTarget := false
 
 	if rl.IsMouseButtonPressed(rl.MouseRightButton) {
-		mouseX, mouseY := GetMousePosition()
-		moveToX, moveToY = ScreenToWorldIso(mouseX, mouseY, camera)
+		moveToX = cursorWorldX
+		moveToY = cursorWorldY
 		hasMoveTarget = true
 	}
 
@@ -28,11 +33,13 @@ func UpdateInput(camera *Camera) *Input {
 		MoveToX:       moveToX,
 		MoveToY:       moveToY,
 		HasMoveTarget: hasMoveTarget,
+		CursorWorldX:  cursorWorldX,
+		CursorWorldY:  cursorWorldY,
 		Attack:        rl.IsMouseButtonPressed(rl.MouseLeftButton),
-		Skill1:        rl.IsKeyPressed(rl.KeyQ),
-		Skill2:        rl.IsKeyPressed(rl.KeyW),
-		Skill3:        rl.IsKeyPressed(rl.KeyE),
-		Skill4:        rl.IsKeyPressed(rl.KeyR),
+		Skill1:        rl.IsKeyPressed(rl.KeyQ) || rl.IsKeyPressed(rl.KeyOne),
+		Skill2:        rl.IsKeyPressed(rl.KeyW) || rl.IsKeyPressed(rl.KeyTwo),
+		Skill3:        rl.IsKeyPressed(rl.KeyE) || rl.IsKeyPressed(rl.KeyThree),
+		Skill4:        rl.IsKeyPressed(rl.KeyR) || rl.IsKeyPressed(rl.KeyFour),
 	}
 }
 
