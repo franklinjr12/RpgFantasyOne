@@ -1,3 +1,3 @@
 your current task is to refine the step
-7) Classes & Skills (Playable Set)
+12) UI/UX (Must Be Playable and Clear)
 from guidelines\backlog.md and output the refinement as a tasks backlog at guidelines\current_task_refinement.md so it can be used by an AI agent later to complete the code tasks you generated. Analyse the goal, read and understand any relevant part of the code, if you really need you may ask clarification questions, think deeply about what you got after all of this and finally write down the task refinement file adding checkboxes for progress tracking

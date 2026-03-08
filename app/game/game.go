@@ -183,6 +183,13 @@ func (g *Game) updateBoot() {
 			288,
 			rl.Magenta,
 		)
+		manager.LoadTexture(
+			systems.IconSpriteSheetAssetKey,
+			"resources/sprites/raven_fantasy_icons_32x32.png",
+			systems.IconSheetWidth,
+			systems.IconSheetHeight,
+			rl.DarkGray,
+		)
 		manager.LoadFont(assets.FontDefault, "")
 		manager.LoadSound("sfx.ui.confirm", "resources/audio/ui_confirm.wav")
 		manager.LoadSound("sfx.skill.cast.melee", "resources/audio/skill_cast_melee.wav")
@@ -486,7 +493,8 @@ func (g *Game) drawClassSelect() {
 		rl.DrawText(growthText, WindowWidth/2-360, WindowHeight/2+50, 20, rl.DarkGray)
 	}
 
-	rl.DrawText("Press ENTER or SPACE to Confirm", WindowWidth/2-180, WindowHeight/2+90, 22, rl.DarkGray)
+	g.drawClassSkillPreview(g.SelectedClass)
+	rl.DrawText("Press ENTER or SPACE to Confirm", WindowWidth/2-180, WindowHeight/2+275, 22, rl.DarkGray)
 }
 
 func (g *Game) drawRun() {
@@ -606,25 +614,7 @@ func (g *Game) drawRun() {
 		systems.DrawSkillBar(g.Player, g.Settings.SkillLabels())
 	}
 
-	if g.Player == nil || g.Dungeon == nil {
-		return
-	}
-
-	roomText := fmt.Sprintf("Room: %d/%d", g.Dungeon.CurrentRoom+1, len(g.Dungeon.Rooms))
-	healthText := fmt.Sprintf("Health: %d/%d", g.Player.HP, g.Player.MaxHP)
-	manaText := fmt.Sprintf("Mana: %d/%d", g.Player.Mana, g.Player.MaxMana)
-	levelText := fmt.Sprintf("Level: %d | XP: %d/%d", g.Player.Level, g.Player.XP, g.Player.XPToNext)
-	rl.DrawText(roomText, 10, 40, 20, rl.Black)
-	rl.DrawText(healthText, 10, 65, 20, rl.Black)
-	if g.Player.Class.Type == gamedata.ClassTypeCaster {
-		rl.DrawText(manaText, 10, 90, 20, rl.Black)
-	}
-	rl.DrawText(levelText, 10, 115, 20, rl.Black)
-	statPointColor := rl.Gray
-	if g.Player.StatPoints > 0 {
-		statPointColor = rl.DarkGreen
-	}
-	rl.DrawText(fmt.Sprintf("Stat Points: %d", g.Player.StatPoints), 10, 140, 20, statPointColor)
+	g.drawRunHUD()
 
 	if g.LevelUpMenu {
 		rl.DrawRectangle(WindowWidth/2-200, WindowHeight/2-150, 400, 300, rl.NewColor(0, 0, 0, 200))
@@ -674,8 +664,9 @@ func (g *Game) drawRewardSelection() {
 			rl.DrawRectangle(WindowWidth/2-290, y-5, 580, 90, rl.NewColor(255, 255, 0, 50))
 		}
 
-		rl.DrawText(fmt.Sprintf("%d: %s", i+1, item.Name), WindowWidth/2-280, y, 24, color)
-		rl.DrawText(item.Description, WindowWidth/2-280, y+30, 18, rl.Gray)
+		g.drawRewardItemIcon(item, float32(WindowWidth/2-278), float32(y+4), g.SelectedReward == i)
+		rl.DrawText(fmt.Sprintf("%d: %s", i+1, item.Name), WindowWidth/2-228, y, 24, color)
+		rl.DrawText(item.Description, WindowWidth/2-228, y+30, 18, rl.Gray)
 
 		bonusText := "Bonuses: "
 		first := true
@@ -701,7 +692,7 @@ func (g *Game) drawRewardSelection() {
 			bonusText += fmt.Sprintf("%s +%d", statName, bonus)
 			first = false
 		}
-		rl.DrawText(bonusText, WindowWidth/2-280, y+55, 16, rl.LightGray)
+		rl.DrawText(bonusText, WindowWidth/2-228, y+55, 16, rl.LightGray)
 	}
 
 	rl.DrawText("Press ENTER to confirm, 1-3 to choose", WindowWidth/2-190, WindowHeight/2+180, 18, rl.White)

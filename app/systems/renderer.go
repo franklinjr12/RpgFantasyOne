@@ -514,7 +514,11 @@ func DrawSkillBar(player *gameobjects.Player, keyLabels []string) {
 
 		iconMargin := float32(8)
 		iconRect := rl.NewRectangle(slotX+iconMargin, slotY+iconMargin, slotWidth-2*iconMargin, slotHeight-2*iconMargin)
-		rl.DrawRectangleRec(iconRect, rl.NewColor(80, 80, 80, 255))
+		if slot.Skill != nil {
+			DrawIconCell(GetSkillIconCell(slot.Skill.Type), iconRect, rl.White, rl.NewColor(80, 80, 80, 255))
+		} else {
+			rl.DrawRectangleRec(iconRect, rl.NewColor(80, 80, 80, 255))
+		}
 
 		if slot.KeyLabel != "" {
 			textWidth := rl.MeasureText(slot.KeyLabel, 20)
@@ -525,6 +529,19 @@ func DrawSkillBar(player *gameobjects.Player, keyLabels []string) {
 		}
 
 		if slot.Skill != nil {
+			if slot.Skill.ManaCost > 0 {
+				costText := fmt.Sprintf("%d", slot.Skill.ManaCost)
+				costWidth := rl.MeasureText(costText, 16)
+				costX := int32(slotX + slotWidth - float32(costWidth) - 8)
+				costY := int32(slotY + 4)
+				costColor := rl.NewColor(120, 210, 255, 255)
+				if !player.CanUseMana(slot.Skill.ManaCost) {
+					costColor = rl.NewColor(255, 90, 90, 255)
+				}
+				rl.DrawRectangle(costX-2, costY-1, int32(costWidth)+4, 18, rl.NewColor(0, 0, 0, 200))
+				rl.DrawText(costText, costX, costY, 16, costColor)
+			}
+
 			remaining := slot.Skill.RemainingCooldown()
 			if remaining > 0 && slot.Skill.Cooldown > 0 {
 				ratio := remaining / slot.Skill.Cooldown

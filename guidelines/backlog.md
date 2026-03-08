@@ -80,23 +80,23 @@
 ## 7) Classes & Skills (Playable Set)
 > Each class must feel distinct and self-sufficient; 4 skills each implemented + tuned.
 
-- [ ] Class: **Melee**
+- [x] Class: **Melee**
   - [ ] Power Strike (burst)
   - [ ] Guard Stance (damage reduction tradeoff)
   - [ ] Blood Oath (lifesteal window)
   - [ ] Shockwave Slam (AoE + slow)
-- [ ] Class: **Ranged**
+- [x] Class: **Ranged**
   - [ ] Quick Shot (DPS burst)
   - [ ] Retreat Roll (mobility)
   - [ ] Focused Aim (damage up, move down)
   - [ ] Poison Tip (DoT / %HP tick tuned for bosses)
-- [ ] Class: **Caster**
+- [x] Class: **Caster**
   - [ ] Arcane Bolt (nuke)
   - [ ] Mana Shield (mana absorbs damage)
   - [ ] Frost Field (AoE slow zone)
   - [ ] Arcane Drain (AoE damage + mana sustain)
-- [ ] Skill VFX placeholders (simple particles/circles) + SFX hooks
-- [ ] Skill tuning pass for readability and “one more run” feel
+- [x] Skill VFX placeholders (simple particles/circles) + SFX hooks
+- [x] Skill tuning pass for readability and “one more run” feel
 
 ---
 

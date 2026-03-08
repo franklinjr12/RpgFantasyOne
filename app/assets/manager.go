@@ -9,8 +9,9 @@ import (
 
 // Asset keys used by the MVP foundation.
 const (
-	TextureHumanoidSpriteSheet = "texture.humanoid_sprite_sheet"
-	FontDefault                = "font.default"
+	TextureHumanoidSpriteSheet  = "texture.humanoid_sprite_sheet"
+	TextureRavenIconSpriteSheet = "texture.raven_icon_sprite_sheet"
+	FontDefault                 = "font.default"
 )
 
 type AssetManager struct {
