@@ -84,6 +84,12 @@ func (e *Enemy) Update(deltaTime float32, playerX, playerY float32) {
 	}
 
 	gamedata.UpdateEffects(&e.Entity.Effects, deltaTime, e.TakeDamage)
+	moveSpeed := e.MoveSpeed * gamedata.MoveSpeedMultiplier(&e.Entity.Effects)
+	canAct := gamedata.CanAct(&e.Entity.Effects)
+	if !canAct {
+		e.State = EnemyStateIdle
+		return
+	}
 
 	playerCenterX := playerX
 	playerCenterY := playerY
@@ -107,8 +113,8 @@ func (e *Enemy) Update(deltaTime float32, playerX, playerY float32) {
 	} else if e.State == EnemyStateChasing {
 		distanceSqrt := float32(math.Sqrt(float64(distance)))
 		if distanceSqrt > 0 {
-			moveX := (dx / distanceSqrt) * e.MoveSpeed * deltaTime
-			moveY := (dy / distanceSqrt) * e.MoveSpeed * deltaTime
+			moveX := (dx / distanceSqrt) * moveSpeed * deltaTime
+			moveY := (dy / distanceSqrt) * moveSpeed * deltaTime
 			e.PosX += moveX
 			e.PosY += moveY
 
@@ -124,6 +130,9 @@ func (e *Enemy) Update(deltaTime float32, playerX, playerY float32) {
 }
 
 func (e *Enemy) Attack() (bool, int, float32, float32) {
+	if !gamedata.CanAct(&e.Entity.Effects) {
+		return false, 0, 0, 0
+	}
 	if e.CurrentCooldown <= 0 && e.State == EnemyStateAttacking {
 		e.AttackFlashTimer = 0.15
 		e.CurrentCooldown = e.AttackCooldown

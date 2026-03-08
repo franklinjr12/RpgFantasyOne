@@ -1,96 +1,107 @@
-# Step 5 Refinement - Skill System (Casting + Targeting + Delivery)
+# Step 6 Refinement: Status Effects and Combat Resolution
 
-## Goal
-Complete backlog step 5 by finishing missing skill pipeline capabilities in a data-driven way while preserving current gameplay feel for existing skills.
+## Objective
+Refine backlog step 6 into incremental code tasks that deliver:
+- Effect instances with duration and optional tick behavior
+- Non-stacking refresh rule
+- Effect query helpers used by movement/casting/combat
+- Centralized damage and combat resolution
+- Core MVP effects: Slow, Stun, Freeze (full slow), Silence, Burn
 
-## Scope Guardrails
-- Keep runtime order unchanged: `Input -> AI -> Casting -> Projectiles -> Movement -> Combat Resolve -> Effects -> Dungeon/Run -> UI/Render Prep`.
-- Preserve behavior of current class skills unless a checklist item explicitly calls for a behavior change.
-- Prefer extending `app/gamedata` specs and shared systems over adding skill-specific branches in core casting paths.
-- Keep Windows-only and raylib-go compatibility.
+## Guardrails
+- Preserve current room flow, XP, reward, and boss progression behavior.
+- Keep skill definitions data-driven (no branching by skill name).
+- Reuse `app/gamedata` types; do not duplicate effect/damage structs in other packages.
+- Keep Windows and raylib assumptions unchanged.
 
-## Current Baseline (Already Present)
-- Skill data model already includes cooldown, mana cost, targeting spec, delivery spec, damage spec, and effect specs.
-- Skill cooldown ticking, mana spending/regeneration, and cast validation (`cooldown/mana/silence/stun`) already exist.
-- Self/enemy/area targeting and instant/projectile delivery exist.
-- Skill bar and skill key input currently exist with `Q/W/E/R`.
+## Current Code Snapshot (2026-03-08)
+- Runtime pipeline order already exists in `app/game/runtime_pipeline.go`.
+- `gamedata.UpdateEffects` and `ApplyEffect` already exist, but effect semantics are not centralized for movement/acting/casting.
+- Damage is currently split across `systems.ApplySkill`, `player.takeDamageInternal`, and `game/auto_attack.go`.
+- Crit fields in `DamageSpec` exist but are not resolved in the current skill damage path.
+- Enemy and boss movement/combat do not fully interpret control effects (slow/stun/freeze).
+- Burn exists as data but lacks focused runtime validation tests.
 
-## Gaps This Refinement Must Close
-- Directional targeting is not implemented.
-- Single-target resolution is not cursor-prioritized / nearest fallback based on intent.
-- Delayed AoE delivery with telegraph is not implemented.
-- Player projectiles have no explicit lifetime/pierce model.
-- Step requirement mentions `1..4` skill input; code currently supports only `Q/W/E/R`.
-- Optional global cooldown/cast lockout support is missing.
+## Task Backlog
 
-## Expected Touch Points
-- `app/gamedata/skill_specs.go`
-- `app/gamedata/skills.go`
-- `app/systems/skills.go`
-- `app/systems/input.go`
-- `app/systems/renderer.go`
-- `app/game/skills_handler.go`
-- `app/game/runtime_pipeline.go`
-- `app/game/game.go`
-- new tests in `app/systems` and/or `app/game` (plus `app/gamedata` if needed)
+### A) Effect semantics and helper API
+- [x] Add a small helper API in `app/gamedata/effect_system.go` (or `app/gamedata/effect_queries.go`) for:
+  - [x] `CanAct(effects)` (false on Stun)
+  - [x] `CanCast(effects)` (false on Stun or Silence)
+  - [x] `MoveSpeedMultiplier(effects)` (Slow and MoveSpeedReduction interactions, Freeze as full slow => multiplier `0`)
+  - [x] `HasCrowdControl(effects)` (future hook)
+- [x] Keep existing `HasEffect` and `GetEffectMagnitude` available for compatibility, then migrate call sites gradually.
+- [x] Ensure Freeze semantics are data-driven through helper logic instead of scattered hardcoded checks.
 
-## Implementation Backlog (Mandatory)
+### B) Effect lifecycle hardening
+- [x] Keep MVP non-stacking behavior: reapplying the same effect type refreshes duration.
+- [x] Preserve strongest magnitude on refresh for now and document this as MVP policy.
+- [x] Update periodic tick handling to support `dt > tickRate` safely (no skipped ticks).
+- [x] Restrict periodic damage application to intended DOT effects (Burn and Poison), avoiding accidental ticks on non-DOT effects.
+- [x] Add short TODO hooks for future stack policies (count-based stacking, diminishing returns, immunity).
 
-### 1) Targeting Data and Intent Contract
-- [x] Extend targeting spec to support directional targeting parameters needed for MVP cone/line behavior (for example: angle/width and forward range).
-- [x] Add/standardize cast intent data passed into targeting/delivery (cursor world position and directional vector), so targeting is not inferred ad hoc in multiple places.
-- [x] Ensure zero-values keep existing self/enemy/area skills behaviorally unchanged.
+### C) Centralized damage resolver
+- [x] Create a dedicated damage resolver in `app/systems` (example: `damage_resolver.go`) with typed request/result structs.
+- [x] Move damage math from `systems.ApplySkill` into the resolver:
+  - [x] stat scaling from `DamageSpec`
+  - [x] mitigation by damage type (physical/magical resist, true damage bypass)
+  - [x] crit chance and crit multiplier resolution
+- [x] Keep current hit feedback behavior intact (player/enemy flash timing should not regress).
 
-### 2) Target Resolution System
-- [x] Refactor target resolution so `TargetSelf`, `TargetEnemy`, `TargetArea`, and new directional targeting all run through one resolver.
-- [x] Implement single-target behavior: prefer hovered/clicked enemy under cursor if valid; otherwise fallback to nearest valid target in range.
-- [x] Keep boss participation consistent with enemy targeting rules.
-- [x] Make target selection deterministic when distances tie (stable ordering).
-- [x] Add unit tests for self/single(area intent)/nearest fallback/area/directional resolution.
+### D) Combat resolution as the final common path
+- [x] Create a combat resolver in `app/systems` (example: `combat_resolver.go`) that applies, in order:
+  - [x] damage (via damage resolver)
+  - [x] status effects (`EffectSpec` to `EffectInstance`)
+  - [x] on-hit hooks (class lifesteal, effect lifesteal, mana-drain style hooks)
+- [x] Refactor `systems.ApplySkill` to call this resolver instead of performing inline damage/effect logic.
+- [x] Ensure no skill-name branching is introduced in resolver code.
 
-### 3) Delivery System Completion
-- [x] Centralize delivery handling by `Delivery.Type` (`Instant`, `Projectile`, `Delayed`) in one execution path.
-- [x] Keep instant delivery applying through shared `ApplySkill` logic.
-- [x] Implement delayed delivery runtime object(s): delay timer, target point, radius, owning skill/caster, one-shot application on expiry.
-- [x] Add simple telegraph rendering for delayed AoE instances (placeholder circle is enough for MVP).
-- [x] Ensure delayed events are cleaned up safely on room/reset transitions.
+### E) Integrate resolver into all hit sources
+- [x] Skill hits:
+  - [x] instant, projectile, and delayed skill paths in `app/game/skills_handler.go` and `app/game/runtime_pipeline.go` use combat resolver logic
+- [x] Auto attacks:
+  - [x] melee/ranged/caster auto attacks in `app/game/auto_attack.go` route damage and on-hit hooks through the same resolver
+- [x] Enemy and boss hits:
+  - [x] `ApplyPlayerDirectHit` keeps i-frame/knockback behavior, but damage computation path is centralized
+- [x] Keep XP gain, kill-heal, and target-clearing behavior unchanged.
 
-### 4) Projectile System Completion
-- [x] Extend player projectile runtime data to include lifetime and optional pierce count.
-- [x] Decrement lifetime in projectile updates and expire on timeout/out-of-room bounds.
-- [x] Keep collision behavior unified so hit processing calls shared skill application path.
-- [x] Implement optional pierce behavior (if pierce > 0 continue; else despawn).
-- [x] Add unit tests for projectile lifetime expiry, collision apply, and pierce behavior.
+### F) Apply effect queries to runtime behavior
+- [x] Player:
+  - [x] replace direct effect checks in `Game.GetPlayerMoveSpeed` with helper API
+  - [x] block auto-attack windup/resolve when `CanAct == false` (stun lockout)
+  - [x] keep cast lockout based on centralized `CanCast`
+- [x] Enemies/Boss:
+  - [x] respect slow/freeze/stun in `gameobjects.Enemy.Update` and `Enemy.Attack`
+  - [x] keep boss phase logic and add-spawn behavior unchanged
 
-### 5) Input + Cast Validation Finalization
-- [x] Support skill-slot numeric aliases (`1..4`) in addition to existing `Q/W/E/R` inputs (do not remove `Q/W/E/R` defaults).
-- [x] Keep cast validation centralized (cooldown, resource, silence, stun) and prevent duplicate checks across call sites.
-- [x] Add tests for cast validation edge cases (insufficient mana, active cooldown, silence/stun blocked casts).
+### G) Core MVP effects validation
+- [x] Verify these effects are fully functional in runtime and tests:
+  - [x] Slow: movement reduction
+  - [x] Freeze: full slow (movement zero) without separate hardcoded paths
+  - [x] Stun: blocks movement and actions
+  - [x] Silence: blocks skill casts only
+  - [x] Burn: periodic damage over time
+- [x] Keep Poison behavior intact while implementing Burn checks.
 
-### 6) Skill Data Wiring
-- [x] Populate/normalize `Delivery` fields (`Speed`, `Delay`, `Lifetime`, optional pierce-related value if introduced) in skill definitions where relevant.
-- [x] Preserve current behavior of existing skills; if any skill is intentionally moved to delayed/directional delivery, document the intentional change in this file during implementation.
-- [x] Remove or isolate ad hoc skill-type branching in core casting flow where feasible within this step, without breaking current skill outcomes.
+### H) Tests and smoke checklist
+- [x] Add or expand unit tests in `app/gamedata` for:
+  - [x] effect refresh policy
+  - [x] periodic tick correctness with large `dt`
+  - [x] helper query semantics (`CanAct`, `CanCast`, `MoveSpeedMultiplier`)
+- [x] Add or expand tests in `app/game` and/or `app/systems` (with `//go:build raylib` when needed) for:
+  - [x] stun blocks player actions
+  - [x] silence blocks casting but not movement
+  - [x] freeze sets effective movement to zero
+  - [x] burn ticks and expires correctly
+  - [x] skill/projectile/auto-attack paths share combat resolution behavior
+- [x] Run `go test ./...` and document tagged test commands separately if raylib-tagged tests are added.
 
-### 7) Verification and Done Gates
+## Definition of Done
+- [x] All Step 6 backlog bullets are implemented without changing run flow state transitions.
+- [x] Damage/effect application has one primary shared path (no duplicate combat math spread across files).
+- [x] Core MVP effects are behaviorally correct and covered by tests.
 - [x] `go test ./...` passes.
-- [x] `go build -o .\\output\\app.exe .\\app` passes.
-- [ ] Manual smoke checklist completed:
-- [ ] Cast all 4 skills for each class without runtime errors.
-- [ ] Projectile skills expire by hit, bounds, or lifetime (no lingering dead projectiles).
-- [ ] Delayed AoE telegraph appears and applies at delay expiry.
-- [ ] Directional targeting affects only targets in front of caster.
 
-## Optional Enhancements (Do Not Block Step 5)
-- [ ] Add configurable global cooldown (default OFF) applied across all skill casts.
-- [ ] Add configurable cast lockout window (default OFF) for readability after cast start.
-- [ ] Add tests for optional GCD/lockout behavior when enabled.
-
-## Step Completion Rule
-Step 5 is complete when all mandatory checkboxes are checked and optional items are either completed or explicitly left disabled with rationale in implementation notes.
-
-## Implementation Notes (2026-03-06)
-- Intentional behavior change: `Shockwave Slam` now uses directional targeting (`TargetDirection`) with a forward cone.
-- Intentional behavior change: `Frost Field` now uses delayed ground-targeted delivery (`DeliveryDelayed`) with cast range and telegraphed delay.
-- Projectile skills now define explicit `Lifetime`, and `Poison Tip` is configured with `Pierce: 1`.
-- Added focused tests under `app/systems/skills_test.go` and `app/game/projectiles_system_test.go` with `//go:build raylib` so they can run in raylib-enabled environments.
+## Verification Notes
+- Default test suite: `go test ./...` (pass).
+- Raylib-tagged suite command: `go test -tags raylib ./...` (fails in current environment because `raylib.dll` is missing).

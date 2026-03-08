@@ -125,6 +125,9 @@ func (g *Game) spawnSkillProjectile(skill *gamedata.Skill, intent systems.CastIn
 		Skill:      skill,
 		Caster:     g.Player,
 	}
+	if skill.DamageSpec != nil {
+		proj.DamageType = skill.DamageSpec.DamageType
+	}
 	g.Projectiles = append(g.Projectiles, proj)
 	return true
 }

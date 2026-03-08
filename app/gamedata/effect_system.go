@@ -1,5 +1,14 @@
 package gamedata
 
+type EffectStackPolicy int
+
+const (
+	EffectStackPolicyRefreshDuration EffectStackPolicy = iota
+	EffectStackPolicyRefreshDurationKeepStrongestMagnitude
+)
+
+var DefaultEffectStackPolicy = EffectStackPolicyRefreshDurationKeepStrongestMagnitude
+
 func UpdateEffects(effects *[]EffectInstance, dt float32, takeDamage func(int)) {
 	if effects == nil {
 		return
@@ -10,13 +19,13 @@ func UpdateEffects(effects *[]EffectInstance, dt float32, takeDamage func(int)) 
 
 		eff.TimeLeft -= dt
 
-		if eff.TickRate > 0 {
+		if eff.TickRate > 0 && IsDamageOverTimeEffect(eff.Type) {
 			eff.TickTimer += dt
-			if eff.TickTimer >= eff.TickRate {
+			for eff.TickTimer >= eff.TickRate {
 				if takeDamage != nil {
 					takeDamage(int(eff.Magnitude))
 				}
-				eff.TickTimer = 0
+				eff.TickTimer -= eff.TickRate
 			}
 		}
 
@@ -28,6 +37,10 @@ func UpdateEffects(effects *[]EffectInstance, dt float32, takeDamage func(int)) 
 }
 
 func ApplyEffect(effects *[]EffectInstance, newEffect Effect) {
+	ApplyEffectWithPolicy(effects, newEffect, DefaultEffectStackPolicy)
+}
+
+func ApplyEffectWithPolicy(effects *[]EffectInstance, newEffect Effect, policy EffectStackPolicy) {
 	if effects == nil {
 		return
 	}
@@ -35,7 +48,7 @@ func ApplyEffect(effects *[]EffectInstance, newEffect Effect) {
 	for i := range *effects {
 		if (*effects)[i].Type == newEffect.Type {
 			(*effects)[i].TimeLeft = newEffect.Duration
-			if newEffect.Magnitude > (*effects)[i].Magnitude {
+			if policy == EffectStackPolicyRefreshDurationKeepStrongestMagnitude && newEffect.Magnitude > (*effects)[i].Magnitude {
 				(*effects)[i].Magnitude = newEffect.Magnitude
 			}
 			return
@@ -79,4 +92,50 @@ func GetEffectMagnitude(effects *[]EffectInstance, effectType EffectType) float3
 		}
 	}
 	return 0
+}
+
+func IsDamageOverTimeEffect(effectType EffectType) bool {
+	return effectType == EffectBurn || effectType == EffectPoison
+}
+
+func CanAct(effects *[]EffectInstance) bool {
+	return !HasEffect(effects, EffectStun)
+}
+
+func CanCast(effects *[]EffectInstance) bool {
+	if !CanAct(effects) {
+		return false
+	}
+	return !HasEffect(effects, EffectSilence)
+}
+
+func HasCrowdControl(effects *[]EffectInstance) bool {
+	return HasEffect(effects, EffectStun) || HasEffect(effects, EffectFreeze) || HasEffect(effects, EffectSlow) || HasEffect(effects, EffectSilence)
+}
+
+func MoveSpeedMultiplier(effects *[]EffectInstance) float32 {
+	if effects == nil {
+		return 1
+	}
+	if !CanAct(effects) {
+		return 0
+	}
+	if HasEffect(effects, EffectFreeze) {
+		return 0
+	}
+
+	multiplier := float32(1)
+	if HasEffect(effects, EffectSlow) {
+		multiplier *= (1 - GetEffectMagnitude(effects, EffectSlow))
+	}
+	if HasEffect(effects, EffectMoveSpeedReduction) {
+		multiplier *= (1 - GetEffectMagnitude(effects, EffectMoveSpeedReduction))
+	}
+	if HasEffect(effects, EffectMoveSpeedBoost) {
+		multiplier *= (1 + GetEffectMagnitude(effects, EffectMoveSpeedBoost))
+	}
+	if multiplier < 0 {
+		return 0
+	}
+	return multiplier
 }

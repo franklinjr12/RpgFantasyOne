@@ -78,6 +78,7 @@ type Projectile struct {
 	Alive      bool
 	Skill      *gamedata.Skill
 	Caster     *gameobjects.Player
+	DamageType gamedata.DamageType
 }
 
 type DelayedSkillEffect struct {
@@ -779,26 +780,5 @@ func (g *Game) GetPlayerMoveSpeed() float32 {
 		return 0
 	}
 
-	speed := g.Player.MoveSpeed
-
-	if gamedata.HasEffect(&g.Player.Effects, gamedata.EffectSlow) {
-		magnitude := gamedata.GetEffectMagnitude(&g.Player.Effects, gamedata.EffectSlow)
-		speed *= (1.0 - magnitude)
-	}
-	if gamedata.HasEffect(&g.Player.Effects, gamedata.EffectFreeze) {
-		return 0
-	}
-	if gamedata.HasEffect(&g.Player.Effects, gamedata.EffectStun) {
-		return 0
-	}
-	if gamedata.HasEffect(&g.Player.Effects, gamedata.EffectMoveSpeedReduction) {
-		magnitude := gamedata.GetEffectMagnitude(&g.Player.Effects, gamedata.EffectMoveSpeedReduction)
-		speed *= (1.0 - magnitude)
-	}
-	if gamedata.HasEffect(&g.Player.Effects, gamedata.EffectMoveSpeedBoost) {
-		magnitude := gamedata.GetEffectMagnitude(&g.Player.Effects, gamedata.EffectMoveSpeedBoost)
-		speed *= (1.0 + magnitude)
-	}
-
-	return speed
+	return g.Player.MoveSpeed * gamedata.MoveSpeedMultiplier(&g.Player.Effects)
 }

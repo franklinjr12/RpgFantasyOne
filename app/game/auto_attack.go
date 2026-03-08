@@ -19,7 +19,12 @@ func (g *Game) ApplyPlayerDirectHit(damage int, sourceX, sourceY float32) bool {
 		return false
 	}
 
-	g.Player.TakeTypedDamageWithoutFlash(damage, gamedata.DamagePhysical)
+	systems.ApplyCombatHit(systems.CombatHitRequest{
+		Target:        g.Player,
+		BaseDamage:    damage,
+		DamageType:    gamedata.DamagePhysical,
+		SuppressFlash: true,
+	})
 	g.Player.HitFlashTimer = PlayerHitFlashDuration
 	g.Player.StartHurtIFrames(PlayerHurtIFrameDuration)
 	g.Player.ApplyKnockbackFrom(sourceX, sourceY, PlayerKnockbackImpulse)
@@ -28,6 +33,11 @@ func (g *Game) ApplyPlayerDirectHit(damage int, sourceX, sourceY float32) bool {
 
 func (g *Game) UpdateAutoAttack(dt float32) {
 	if g.Player == nil {
+		return
+	}
+	if !gamedata.CanAct(&g.Player.Effects) {
+		g.Player.AttackState = gameobjects.PlayerAttackStateIdle
+		g.Player.AttackStateTimer = 0
 		return
 	}
 
@@ -69,6 +79,11 @@ func (g *Game) UpdateAutoAttack(dt float32) {
 
 func (g *Game) advanceAutoAttackState(dt float32) {
 	if g.Player == nil || dt <= 0 {
+		return
+	}
+	if !gamedata.CanAct(&g.Player.Effects) {
+		g.Player.AttackState = gameobjects.PlayerAttackStateIdle
+		g.Player.AttackStateTimer = 0
 		return
 	}
 
@@ -127,18 +142,30 @@ func (g *Game) resolveMeleeAutoAttack(damage int) {
 	switch t := g.PlayerAttackTarget.(type) {
 	case *gameobjects.Enemy:
 		wasAlive := t.IsAlive()
-		t.TakeDamage(damage)
-		lifesteal := int(float32(damage) * g.Player.Class.LifestealPercent)
-		g.Player.Heal(lifesteal)
+		systems.ApplyCombatHit(systems.CombatHitRequest{
+			Caster:             g.Player,
+			Target:             t,
+			BaseDamage:         damage,
+			DamageType:         gamedata.DamagePhysical,
+			CritMultiplier:     1.5,
+			ApplyOnHitHooks:    true,
+			UseSourceModifiers: false,
+		})
 		if wasAlive && !t.IsAlive() {
 			g.Player.GainXP(20)
 			g.PlayerAttackTarget = nil
 		}
 	case *gameobjects.Boss:
 		wasAlive := t.IsAlive()
-		t.TakeDamage(damage)
-		lifesteal := int(float32(damage) * g.Player.Class.LifestealPercent)
-		g.Player.Heal(lifesteal)
+		systems.ApplyCombatHit(systems.CombatHitRequest{
+			Caster:             g.Player,
+			Target:             t,
+			BaseDamage:         damage,
+			DamageType:         gamedata.DamagePhysical,
+			CritMultiplier:     1.5,
+			ApplyOnHitHooks:    true,
+			UseSourceModifiers: false,
+		})
 		if wasAlive && !t.IsAlive() {
 			g.Player.GainXP(100)
 			g.PlayerAttackTarget = nil
@@ -175,6 +202,8 @@ func (g *Game) resolveRangedAutoAttack(damage int) {
 		Pierce:     0,
 		HitTargets: map[interface{}]struct{}{},
 		Alive:      true,
+		Caster:     g.Player,
+		DamageType: gamedata.DamagePhysical,
 	}
 	g.Projectiles = append(g.Projectiles, proj)
 }
@@ -200,7 +229,15 @@ func (g *Game) resolveCasterAutoAttack(damage int) {
 	switch t := g.PlayerAttackTarget.(type) {
 	case *gameobjects.Enemy:
 		wasAlive := t.IsAlive()
-		t.TakeDamage(damage)
+		systems.ApplyCombatHit(systems.CombatHitRequest{
+			Caster:             g.Player,
+			Target:             t,
+			BaseDamage:         damage,
+			DamageType:         gamedata.DamageMagical,
+			CritMultiplier:     1.5,
+			ApplyOnHitHooks:    true,
+			UseSourceModifiers: false,
+		})
 		g.Player.UseMana(g.Player.Class.ManaCost)
 		if wasAlive && !t.IsAlive() {
 			g.Player.GainXP(20)
@@ -208,7 +245,15 @@ func (g *Game) resolveCasterAutoAttack(damage int) {
 		}
 	case *gameobjects.Boss:
 		wasAlive := t.IsAlive()
-		t.TakeDamage(damage)
+		systems.ApplyCombatHit(systems.CombatHitRequest{
+			Caster:             g.Player,
+			Target:             t,
+			BaseDamage:         damage,
+			DamageType:         gamedata.DamageMagical,
+			CritMultiplier:     1.5,
+			ApplyOnHitHooks:    true,
+			UseSourceModifiers: false,
+		})
 		g.Player.UseMana(g.Player.Class.ManaCost)
 		if wasAlive && !t.IsAlive() {
 			g.Player.GainXP(100)

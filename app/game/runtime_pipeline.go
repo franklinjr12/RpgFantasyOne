@@ -342,12 +342,15 @@ func (s *projectilesSystem) applyProjectileHit(proj *Projectile, target interfac
 		return
 	}
 
-	switch t := target.(type) {
-	case *gameobjects.Enemy:
-		t.TakeDamage(proj.Damage)
-	case *gameobjects.Boss:
-		t.TakeDamage(proj.Damage)
-	}
+	systems.ApplyCombatHit(systems.CombatHitRequest{
+		Caster:             proj.Caster,
+		Target:             target,
+		BaseDamage:         proj.Damage,
+		DamageType:         proj.DamageType,
+		CritMultiplier:     1.5,
+		ApplyOnHitHooks:    proj.Caster != nil,
+		UseSourceModifiers: false,
+	})
 }
 
 func (s *projectilesSystem) updateDelayedSkillEffects(g *Game, dt float32) {

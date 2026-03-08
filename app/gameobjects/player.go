@@ -172,9 +172,13 @@ func (p *Player) TakeTypedDamageWithoutFlash(damage int, damageType gamedata.Dam
 	p.takeDamageInternal(damage, damageType, false)
 }
 
-func (p *Player) takeDamageInternal(damage int, damageType gamedata.DamageType, flash bool) {
+func (p *Player) ApplyTypedDamage(damage int, damageType gamedata.DamageType, flash bool) int {
+	return p.takeDamageInternal(damage, damageType, flash)
+}
+
+func (p *Player) takeDamageInternal(damage int, damageType gamedata.DamageType, flash bool) int {
 	if damage <= 0 {
-		return
+		return 0
 	}
 
 	if gamedata.HasEffect(&p.Entity.Effects, gamedata.EffectDamageReduction) {
@@ -200,10 +204,11 @@ func (p *Player) takeDamageInternal(damage int, damageType gamedata.DamageType, 
 		}
 	}
 
-	p.Entity.ApplyDamage(damage)
+	applied := p.Entity.ApplyDamage(damage)
 	if flash {
 		p.HitFlashTimer = 0.2
 	}
+	return applied
 }
 
 func (p *Player) CanTakeDirectHit() bool {

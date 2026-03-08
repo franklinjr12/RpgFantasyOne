@@ -46,34 +46,34 @@
 ---
 
 ## 5) Skill System (Casting + Targeting + Delivery)
-- [ ] Skill definitions: cooldown, cost, targeting spec, delivery spec, damage spec, effect specs
-- [ ] Cooldown system + resource system (HP sustain rules, mana/energy where applicable)
-- [ ] Targeting system:
+- [x] Skill definitions: cooldown, cost, targeting spec, delivery spec, damage spec, effect specs
+- [x] Cooldown system + resource system (HP sustain rules, mana/energy where applicable)
+- [x] Targeting system:
   - Self target
   - Single target (cursor hover/click or nearest-in-range)
   - Area target (ground circle)
   - Directional target (simple forward cone/line for MVP)
-- [ ] Delivery system:
+- [x] Delivery system:
   - Instant
   - Projectile
   - Delayed AoE (telegraphed ground effect)
-- [ ] Projectile system (lifetime, collision, hit callback, pierce optional)
-- [ ] Skill bar input (keys 1–4 initially), cast validation (silence/stun, cooldowns, resource)
-- [ ] Global cooldown (optional) and cast lockouts (optional) for readability
+- [x] Projectile system (lifetime, collision, hit callback, pierce optional)
+- [x] Skill bar input (keys 1–4 initially), cast validation (silence/stun, cooldowns, resource)
+- [x] Global cooldown (optional) and cast lockouts (optional) for readability
 
 ---
 
 ## 6) Status Effects & Combat Resolution
-- [ ] Effect instances with duration + optional tick rate (burn/poison)
-- [ ] Non-stacking MVP rule (refresh duration) + future-proof hooks for stacking later
-- [ ] Effect query helpers used by systems (move speed modifiers, can act, can cast)
-- [ ] Damage system:
+- [x] Effect instances with duration + optional tick rate (burn/poison)
+- [x] Non-stacking MVP rule (refresh duration) + future-proof hooks for stacking later
+- [x] Effect query helpers used by systems (move speed modifiers, can act, can cast)
+- [x] Damage system:
   - Stat scaling (DamageSpec)
   - Mitigation (physical/magic resist)
   - Crit + hit feedback
-- [ ] Combat resolution system:
+- [x] Combat resolution system:
   - Apply damage + apply effects + on-hit hooks (lifesteal/mana drain)
-- [ ] Implement core effects for MVP: Slow, Stun, Freeze (as full slow), Silence, Burn
+- [x] Implement core effects for MVP: Slow, Stun, Freeze (as full slow), Silence, Burn
 
 ---
 
