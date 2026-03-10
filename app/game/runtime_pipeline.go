@@ -838,6 +838,13 @@ func (s *dungeonRunSystem) Update(ctx *RuntimeContext, dt float32) {
 	}
 
 	if g.CurrentRoom != nil {
+		if g.CurrentRoom.Type == world.RoomTypeEvent && !g.CurrentRoom.Completed {
+			g.CurrentRoom.EventTimeLeft -= dt
+			if g.CurrentRoom.EventTimeLeft < 0 {
+				g.CurrentRoom.EventTimeLeft = 0
+			}
+		}
+
 		roomCleared := g.CheckRoomCompletion()
 		if g.CurrentRoom.IsBoss() && roomCleared {
 			g.EnterReward()

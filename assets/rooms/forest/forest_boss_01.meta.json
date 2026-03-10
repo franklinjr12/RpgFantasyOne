@@ -1,0 +1,19 @@
+{
+  "id": "forest_boss_01",
+  "biome": "forest",
+  "type": "boss",
+  "difficulty": 3,
+  "weight": 1,
+  "allow_rotation": false,
+  "tags": [
+    "boss_arena",
+    "no_rotation"
+  ],
+  "doors": [
+    {
+      "x": 0,
+      "y": 4,
+      "dir": "west"
+    }
+  ]
+}

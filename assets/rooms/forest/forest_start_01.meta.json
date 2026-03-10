@@ -1,0 +1,19 @@
+{
+  "id": "forest_start_01",
+  "biome": "forest",
+  "type": "start",
+  "difficulty": 1,
+  "weight": 10,
+  "allow_rotation": false,
+  "tags": [
+    "small",
+    "intro"
+  ],
+  "doors": [
+    {
+      "x": 11,
+      "y": 4,
+      "dir": "east"
+    }
+  ]
+}

@@ -7,6 +7,7 @@ import (
 	"singlefantasy/app/gamedata"
 	"singlefantasy/app/gameobjects"
 	"singlefantasy/app/systems"
+	"singlefantasy/app/world"
 
 	rl "github.com/gen2brain/raylib-go/raylib"
 )
@@ -300,8 +301,14 @@ func (g *Game) drawMinimap() {
 		if room.Completed {
 			color = rl.NewColor(70, 170, 85, 255)
 		}
-		if room.IsBoss() {
+		if room.Type == world.RoomTypeBoss {
 			color = rl.NewColor(140, 90, 190, 255)
+		} else if room.Type == world.RoomTypeStart {
+			color = rl.NewColor(88, 130, 220, 255)
+		} else if room.Type == world.RoomTypeElite {
+			color = rl.NewColor(220, 130, 70, 255)
+		} else if room.Type == world.RoomTypeEvent {
+			color = rl.NewColor(85, 180, 185, 255)
 		}
 		if i == g.Dungeon.CurrentRoom {
 			color = rl.NewColor(250, 225, 90, 255)

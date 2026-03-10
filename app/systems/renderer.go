@@ -48,7 +48,35 @@ const (
 
 const (
 	HumanoidSpriteSheetAssetKey = assets.TextureHumanoidSpriteSheet
+	FloorAtlasAssetKey          = "texture.atlas.floor"
+	WallsHighAtlasAssetKey      = "texture.atlas.walls.high"
 )
+
+const (
+	floorAtlasTileWidth    = 16
+	floorAtlasTileHeight   = 16
+	wallsAtlasTileWidth    = 16
+	wallsAtlasTileHeight   = 32
+	doorAtlasTileWidth     = 32
+	doorAtlasTileHeight    = 64
+	facingWallTileX        = 0
+	facingWallTileY        = 3
+	perpendicularWallTileX = 0
+	perpendicularWallTileY = 2
+	doorTileX              = 16
+	doorTileY              = 2
+	wallHeightTiles        = 2.0
+	doorHeightTiles        = 2.0
+)
+
+var floorTileVariants = [][2]int{
+	{0, 0},
+	{0, 1},
+	{0, 2},
+	{1, 0},
+	{1, 1},
+	{1, 2},
+}
 
 func NewCamera() *Camera {
 	return &Camera{
@@ -158,6 +186,11 @@ func DrawRoom(room *world.Room, camera *Camera) {
 		return
 	}
 
+	if hasTemplateTileGrid(room) {
+		drawTemplateRoom(room, camera)
+		return
+	}
+
 	corners := projectAABBBase(world.AABB{X: room.X, Y: room.Y, Width: room.Width, Height: room.Height}, camera)
 
 	floorColor := TerrainColorNormalRGBA
@@ -190,19 +223,16 @@ func DrawRoom(room *world.Room, camera *Camera) {
 }
 
 func DrawObstacle(obstacle world.AABB, camera *Camera) {
-	base := projectAABBBase(obstacle, camera)
-	lift := float32(28)
-	top := [4]rl.Vector2{liftIso(base[0], lift), liftIso(base[1], lift), liftIso(base[2], lift), liftIso(base[3], lift)}
-
-	topColor := rl.NewColor(123, 123, 123, 255)
-	rightColor := rl.NewColor(98, 98, 98, 255)
-	leftColor := rl.NewColor(84, 84, 84, 255)
-	outline := rl.NewColor(30, 30, 30, 255)
-
-	drawIsoQuad([4]rl.Vector2{top[1], top[2], base[2], base[1]}, rightColor)
-	drawIsoQuad([4]rl.Vector2{top[2], top[3], base[3], base[2]}, leftColor)
-	drawIsoQuad(top, topColor)
-	drawIsoOutline(top, outline)
+	screenX, screenY := WorldToScreenIso(obstacle.X, obstacle.Y, camera)
+	rl.DrawRectangleRec(
+		rl.NewRectangle(screenX, screenY, obstacle.Width, obstacle.Height),
+		rl.NewColor(92, 92, 92, 255),
+	)
+	rl.DrawRectangleLinesEx(
+		rl.NewRectangle(screenX, screenY, obstacle.Width, obstacle.Height),
+		1,
+		rl.NewColor(35, 35, 35, 255),
+	)
 }
 
 func DrawDoor(door *world.Door, camera *Camera) {
@@ -210,21 +240,187 @@ func DrawDoor(door *world.Door, camera *Camera) {
 		return
 	}
 
-	base := projectAABBBase(door.Bounds, camera)
-	lift := float32(36)
-	top := [4]rl.Vector2{liftIso(base[0], lift), liftIso(base[1], lift), liftIso(base[2], lift), liftIso(base[3], lift)}
-
-	topColor := rl.NewColor(48, 168, 102, 255)
-	sideColor := rl.NewColor(38, 132, 80, 255)
-	if door.Locked {
-		topColor = rl.NewColor(168, 82, 68, 255)
-		sideColor = rl.NewColor(130, 62, 52, 255)
+	wallsAtlas := assets.Get().GetTexture(WallsHighAtlasAssetKey)
+	if wallsAtlas.ID != 0 {
+		drawDoorAtlasSprite(door, camera, wallsAtlas)
+		return
 	}
 
-	drawIsoQuad([4]rl.Vector2{top[1], top[2], base[2], base[1]}, sideColor)
-	drawIsoQuad([4]rl.Vector2{top[2], top[3], base[3], base[2]}, shadeColor(sideColor, -12))
-	drawIsoQuad(top, topColor)
-	drawIsoOutline(top, shadeColor(topColor, -40))
+	screenX, screenY := WorldToScreenIso(door.Bounds.X, door.Bounds.Y, camera)
+	color := rl.NewColor(48, 168, 102, 255)
+	if door.Locked {
+		color = rl.NewColor(168, 82, 68, 255)
+	}
+	rl.DrawRectangleRec(rl.NewRectangle(screenX, screenY, door.Bounds.Width, door.Bounds.Height), color)
+	rl.DrawRectangleLinesEx(rl.NewRectangle(screenX, screenY, door.Bounds.Width, door.Bounds.Height), 1, rl.Black)
+}
+
+func hasTemplateTileGrid(room *world.Room) bool {
+	return room != nil && len(room.Tiles) > 0 && len(room.Tiles[0]) > 0
+}
+
+func drawTemplateRoom(room *world.Room, camera *Camera) {
+	floorAtlas := assets.Get().GetTexture(FloorAtlasAssetKey)
+	wallsAtlas := assets.Get().GetTexture(WallsHighAtlasAssetKey)
+	tileSize := float32(world.RoomTemplateTileSize)
+
+	// Draw ground first so walls and doors can overlay it.
+	for y, row := range room.Tiles {
+		for x, tile := range row {
+			worldX := room.X + float32(x)*world.RoomTemplateTileSize
+			worldY := room.Y + float32(y)*world.RoomTemplateTileSize
+
+			switch tile {
+			case world.TileFloor, world.TileDoor, world.TileHazard, world.TileTrap, world.TileWall:
+				if floorAtlas.ID != 0 {
+					floorTileX, floorTileY := floorVariantForCell(room, x, y)
+					drawAtlasTileAtCell(
+						floorAtlas,
+						floorTileX,
+						floorTileY,
+						floorAtlasTileWidth,
+						floorAtlasTileHeight,
+						worldX,
+						worldY,
+						tileSize,
+						tileSize,
+						camera,
+						rl.White,
+					)
+				} else {
+					screenX, screenY := WorldToScreenIso(worldX, worldY, camera)
+					rl.DrawRectangleRec(rl.NewRectangle(screenX, screenY, tileSize, tileSize), TerrainColorNormalRGBA)
+				}
+			default:
+			}
+		}
+	}
+
+	// Draw wall facades in a separate pass to maintain clean layering.
+	for y, row := range room.Tiles {
+		for x, tile := range row {
+			if tile != world.TileWall {
+				continue
+			}
+
+			worldX := room.X + float32(x)*world.RoomTemplateTileSize
+			worldY := room.Y + float32(y)*world.RoomTemplateTileSize
+
+			if wallsAtlas.ID != 0 {
+				wallTileX, wallTileY, ok := wallAtlasTileForPosition(room, x, y)
+				if !ok {
+					continue
+				}
+				drawAtlasTileBottomAnchored(
+					wallsAtlas,
+					wallTileX,
+					wallTileY,
+					wallsAtlasTileWidth,
+					wallsAtlasTileHeight,
+					worldX,
+					worldY,
+					tileSize,
+					tileSize*wallHeightTiles,
+					camera,
+					rl.White,
+				)
+				continue
+			}
+
+			DrawObstacle(world.AABB{
+				X:      worldX,
+				Y:      worldY,
+				Width:  tileSize,
+				Height: tileSize,
+			}, camera)
+		}
+	}
+
+	for _, door := range room.Doors {
+		DrawDoor(door, camera)
+	}
+}
+
+func wallAtlasTileForPosition(room *world.Room, x, y int) (int, int, bool) {
+	hasWalkableAbove := tileIsWalkable(room, x, y-1)
+	hasWalkableBelow := tileIsWalkable(room, x, y+1)
+	hasWalkableLeft := tileIsWalkable(room, x-1, y)
+	hasWalkableRight := tileIsWalkable(room, x+1, y)
+
+	if hasWalkableAbove || hasWalkableBelow {
+		return facingWallTileX, facingWallTileY, true
+	}
+	if hasWalkableLeft || hasWalkableRight {
+		return perpendicularWallTileX, perpendicularWallTileY, true
+	}
+	return 0, 0, false
+}
+
+func tileIsWalkable(room *world.Room, x, y int) bool {
+	if room == nil || y < 0 || y >= len(room.Tiles) || x < 0 || x >= len(room.Tiles[y]) {
+		return false
+	}
+	tile := room.Tiles[y][x]
+	return tile == world.TileFloor || tile == world.TileDoor || tile == world.TileHazard || tile == world.TileTrap
+}
+
+func floorVariantForCell(room *world.Room, x, y int) (int, int) {
+	hash := (room.ProgressionIndex+1)*73856093 + (x+1)*19349663 + (y+1)*83492791
+	if hash < 0 {
+		hash = -hash
+	}
+	index := hash % len(floorTileVariants)
+	return floorTileVariants[index][0], floorTileVariants[index][1]
+}
+
+func drawAtlasTileAtCell(texture rl.Texture2D, atlasX, atlasY, srcTileWidth, srcTileHeight int, worldX, worldY, destWidth, destHeight float32, camera *Camera, tint rl.Color) {
+	source := rl.NewRectangle(
+		float32(atlasX*srcTileWidth),
+		float32(atlasY*srcTileHeight),
+		float32(srcTileWidth),
+		float32(srcTileHeight),
+	)
+
+	screenX, screenY := WorldToScreenIso(worldX, worldY, camera)
+	dest := rl.NewRectangle(screenX, screenY, destWidth, destHeight)
+	rl.DrawTexturePro(texture, source, dest, rl.NewVector2(0, 0), 0, tint)
+}
+
+func drawAtlasTileBottomAnchored(texture rl.Texture2D, atlasX, atlasY, srcTileWidth, srcTileHeight int, worldX, worldY, destWidth, destHeight float32, camera *Camera, tint rl.Color) {
+	source := rl.NewRectangle(
+		float32(atlasX*srcTileWidth),
+		float32(atlasY*srcTileHeight),
+		float32(srcTileWidth),
+		float32(srcTileHeight),
+	)
+
+	screenX, screenY := WorldToScreenIso(worldX, worldY, camera)
+	dest := rl.NewRectangle(screenX, screenY+destWidth-destHeight, destWidth, destHeight)
+	rl.DrawTexturePro(texture, source, dest, rl.NewVector2(0, 0), 0, tint)
+}
+
+func drawDoorAtlasSprite(door *world.Door, camera *Camera, texture rl.Texture2D) {
+	if door == nil {
+		return
+	}
+	tint := rl.White
+	if door.Locked {
+		tint = rl.NewColor(230, 210, 210, 255)
+	}
+
+	drawAtlasTileBottomAnchored(
+		texture,
+		doorTileX,
+		doorTileY,
+		doorAtlasTileWidth,
+		doorAtlasTileHeight,
+		door.Bounds.X,
+		door.Bounds.Y,
+		door.Bounds.Width,
+		door.Bounds.Height*doorHeightTiles,
+		camera,
+		tint,
+	)
 }
 
 func DrawProjectile(x, y, radius float32, camera *Camera) {

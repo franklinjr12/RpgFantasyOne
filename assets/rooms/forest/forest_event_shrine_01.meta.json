@@ -1,0 +1,25 @@
+{
+  "id": "forest_event_shrine_01",
+  "biome": "forest",
+  "type": "event",
+  "difficulty": 2,
+  "weight": 3,
+  "allow_rotation": false,
+  "tags": [
+    "shrine",
+    "support",
+    "hazard_capable"
+  ],
+  "doors": [
+    {
+      "x": 0,
+      "y": 3,
+      "dir": "west"
+    },
+    {
+      "x": 11,
+      "y": 3,
+      "dir": "east"
+    }
+  ]
+}

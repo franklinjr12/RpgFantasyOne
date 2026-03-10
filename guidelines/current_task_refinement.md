@@ -1,102 +1,148 @@
 ﻿
-# Step 8 Refinement - Enemies & AI Variety (Not a Tech Demo)
+# Step 9 Refinement - Dungeon Generation and Room Flow (Replayable Runs)
 
 ## Goal
-- Deliver a small but meaningful enemy roster for the MVP biome with distinct behavior, elite variety, and deterministic per-room compositions.
-- Keep implementation aligned with project principles: entities store state, systems decide behavior, data lives in `app/gamedata`.
+Implement a template-driven dungeon flow for Biome 1 (forest) using:
+- ASCII `.layout` room files for geometry and markers.
+- `.meta.json` files for room metadata and selection rules.
+- Procedural run assembly (8-12 rooms, 1-2 event rooms, boss at end).
+- Deterministic generation with replayable variation.
+- Room completion rules and door transition UX integrated into current runtime pipeline.
 
-## Scope And Constraints
-- Scope is only backlog step 8 from `guidelines/backlog.md`.
-- Preserve current run loop behavior: room clear flow, door lock/unlock, XP gain, reward/results transitions.
-- Keep Windows + raylib-go assumptions.
-- Prefer incremental migration; do not perform a full architecture rewrite.
-- Avoid skill-name/string branching for enemy behavior; drive behavior by typed data/profile fields.
+## Scope Boundaries
+- In scope: room templates, loader/validation, template selection, room graph/flow, completion rules, door transitions, minimap/debug updates, tests, sample room files.
+- Out of scope: boss AI redesign (step 10), reward/item redesign (step 11), major render style overhaul, multi-biome production content.
 
-## Current Baseline (Observed)
-- `app/gamedata/enemies.go` only defines 3 templates (`Normal`, `Elite`, `Boss`) with no archetype variety.
-- `app/gameobjects/enemy.go` mixes enemy state machine + movement + attack in `Enemy.Update`.
-- `app/world/room.go` spawns enemies with `EnemyRef{X,Y,IsElite}` only; no type/composition director.
-- `app/game/runtime_pipeline.go` AI system calls `enemy.Update`; combat system consumes `enemy.Attack()`.
-- Elites are currently just stronger stats (`IsElite`), no extra modifier behavior.
+## Current Code Reality (Read Before Implementing)
+- `app/world/dungeon.go` currently builds a fixed linear chain: 5 normal + 1 boss.
+- `app/world/room.go` currently creates random rectangle rooms with procedural obstacles/enemy refs.
+- `app/game/runtime_pipeline.go` handles room clear checks, door lock/unlock, transition timer, and room advance.
+- `app/game/ui_hud.go` already has a minimap and room index HUD.
+- `app/systems/renderer.go` already draws rooms, obstacles, and doors in isometric projection.
 
-## Task Backlog
+## Implementation Backlog
 
-### 8.1 Enemy Data Foundation (gamedata-first)
-- [x] Add typed enemy archetype definitions in `app/gamedata/enemies.go`:
-  - `EnemyArchetypeType` enum with at least 6 non-boss archetypes (2 melee chasers, 1 ranged, 1 caster, 1 bruiser, 1 swarmer).
-  - `EnemyArchetype` struct containing combat and AI profile fields (HP, damage, move speed, cooldown, attack/aggro range, attack mode, preferred/retreat range, hitbox, XP reward).
-  - Keep boss template path compatible with current boss setup.
-- [x] Add elite modifier data model in `app/gamedata/enemies.go`:
-  - `EliteModifierType` enum.
-  - `EliteModifier` struct with baseline stat multipliers (`HP`, `Damage`) plus one extra effect payload (on-hit effect and/or aura spec).
-- [x] Extend accessors in `app/gamedata/data_access.go` for enemy archetypes and elite modifiers.
-- [x] Add/extend tests in `app/gamedata` validating:
-  - Exactly 6+ non-boss archetypes are registered.
-  - Required fields are valid (`> 0` where expected).
-  - Elite modifiers exist and are retrievable deterministically.
+### 1) Room Template Domain and Parsing
+- [x] Add room template domain types in `app/world` (or `app/gamedata` if shared broadly):
+- [x] `RoomTemplate`, `DoorMarker`, `SpawnMarker`, `PropMarker`, `EventMarker`, `RoomType`, `DoorDirection`, `SpawnType`, `TileType`.
+- [x] Add metadata DTO + parsing structs for `.meta.json`.
+- [x] Implement `.layout` parser:
+- [x] Enforce rectangular grid.
+- [x] Enforce supported character legend.
+- [x] Enforce bounds (recommended 8x8 min, 30x30 max via constants).
+- [x] Convert ASCII to tile grid + marker lists.
+- [x] Implement metadata loader and validation:
+- [x] Required fields: `id`, `biome`, `type`, `doors`.
+- [x] Optional/defaulted fields: `difficulty`, `weight`, `allow_rotation`, `tags`.
+- [x] Validate door coordinates in bounds.
+- [x] Validate metadata doors match `D` markers in layout.
+- [x] Fail hard on invalid template pairs at load time.
+- [x] Add unit tests for parser + validator edge cases.
 
-### 8.2 Enemy Spawn Reference + Construction Path
-- [x] Extend `app/world/room.go` `EnemyRef` to include enemy type and elite modifier metadata (not only `IsElite`).
-- [x] Introduce constructor path in `app/gameobjects/enemy.go` that builds enemy instances from typed spawn refs (archetype + elite modifier), while keeping existing codepaths compiling.
-- [x] Ensure spawned enemies carry enough metadata for AI, rendering, HUD label, and combat effect logic.
-- [x] Update spawn callsites in `app/game/game.go` (`SpawnRoomEnemies`) to use the new typed enemy refs.
+### 2) Template Registry and Startup Loading
+- [x] Add template registry loader that scans `assets/rooms/<biome>/`.
+- [x] Pair `*.layout` with matching `*.meta.json` by base filename.
+- [x] Return actionable errors for missing pair files.
+- [x] Make load deterministic (stable file ordering before parse).
+- [x] Expose query API by biome/type/tags/difficulty for generator use.
+- [x] Add tests for directory scan/pairing and deterministic registry ordering.
 
-### 8.3 Enemy AI Framework (System-driven decisions)
-- [x] Refactor enemy update responsibilities so AI decision logic is owned by the AI system (or AI helper invoked by it), not embedded movement logic inside `Enemy.Update`.
-- [x] Add intent/state fields on enemy entities as needed (state, desired movement vector, attack intent, cooldown/timing trackers).
-- [x] Keep state machine explicit and testable: `idle -> chase -> attack` with optional `retreat` for ranged/caster profiles.
-- [x] Update `app/game/runtime_pipeline.go`:
-  - AI step computes intent per archetype/profile.
-  - Movement step applies enemy movement using that intent.
-  - Combat/projectile steps resolve enemy attacks from intent and cooldown readiness.
-- [x] Maintain effect integration (`gamedata.UpdateEffects`, `CanAct`, move-speed modifiers) for enemies after refactor.
+### 3) Rotation and Door Compatibility
+- [x] Implement optional room rotation for templates where `allow_rotation=true`:
+- [x] Support 0, 90, 180, 270 degrees.
+- [x] Rotate tile grid, doors, and all marker coordinates consistently.
+- [x] Add door direction rotation mapping (`north/east/south/west`).
+- [x] Add tests that verify rotated coordinates and door directions.
+- [x] Add door compatibility helpers:
+- [x] Compatibility pairs: east<->west, north<->south.
+- [x] Coordinate alignment checks for connected doors.
 
-### 8.4 Implement MVP Roster Variety (6 Enemy Roles)
-- [x] Implement 2 melee chaser archetypes with distinct speed/HP profiles.
-- [x] Implement 1 ranged enemy that attacks via projectile delivery.
-- [x] Implement 1 caster enemy that uses AoE or debuff behavior (telegraphed if AoE).
-- [x] Implement 1 tanky bruiser (slow move, heavy hit, longer cadence).
-- [x] Implement 1 swarmer (low HP, high speed, pressure role).
-- [x] Ensure role behavior is profile/data-driven (`AttackMode`, ranges, timing, effect specs), not keyed by display name checks.
+### 4) Run Shape and Procedural Selection
+- [x] Introduce a dungeon generation config struct (seed, biome, run length range, event count range).
+- [x] Replace fixed `DungeonLength` chain with generated room sequence:
+- [x] Start room first.
+- [x] Combat-heavy middle.
+- [x] 1-2 event rooms inserted in middle slots.
+- [x] At least 1 elite room before boss.
+- [x] Boss room last.
+- [x] Implement weighted template selection filtered by:
+- [x] Biome.
+- [x] Room type.
+- [x] Difficulty band by progression index.
+- [x] Required tags (if used by generation rule).
+- [x] Door compatibility.
+- [x] Prevent immediate template repeats.
+- [x] Preserve deterministic generation for same seed.
+- [x] Add generator tests for sequence invariants and determinism.
 
-### 8.5 Elite Modifier System (Beyond Stat Inflation)
-- [x] Keep baseline elite stat bump (+HP/+damage) data-driven through elite modifiers.
-- [x] Implement at least one extra elite behavior effect (example: burn-on-hit, slow aura, or equivalent) and apply it through centralized combat/effect paths.
-- [x] Ensure elite modifiers are visible to player-facing labels (e.g., target frame name or debug text) without breaking existing HUD flow.
-- [x] Keep deterministic modifier assignment for a given room seed/index.
+### 5) Runtime Room Instantiation (Template -> `world.Room`)
+- [x] Add conversion from `RoomTemplate` to runtime `world.Room` while keeping current systems compatible.
+- [x] Compute room world bounds from tile dimensions and tile size constants.
+- [x] Build `Room.Obstacles` from wall/hazard/trap tiles used for collision.
+- [x] Build room doors from template door markers (with lock defaults).
+- [x] Build enemy spawn refs from `s`, `E`, `B` markers:
+- [x] Normal rooms: map `s` to spawn director assignments.
+- [x] Elite rooms: ensure at least one elite assignment from `E` if present.
+- [x] Boss room: consume `B` marker as boss spawn anchor.
+- [x] Keep existing flow fallback when markers are missing (do not panic).
 
-### 8.6 Spawn Director Per Room (Composition + Ramp)
-- [x] Replace current enemy generation in `app/world/room.go` with a spawn director that decides composition before position placement.
-- [x] Spawn director inputs must include room progression context (room index or equivalent) and deterministic RNG source.
-- [x] Add difficulty ramp rules by room progression:
-  - Threat budget increases over rooms.
-  - Composition shifts from mostly basic melee to mixed roles.
-  - Elite frequency/modifier pressure ramps later in run.
-- [x] Preserve room spawn safety constraints already present (avoid center safe zone and obstacle overlap).
-- [x] Keep dungeon generation deterministic; same seed/setup must yield the same room compositions.
+### 6) Room Completion Rules and Flow
+- [x] Add explicit completion rule per room type:
+- [x] `combat`: kill all alive enemies.
+- [x] `elite`: kill elite target(s), then clear leftovers or auto-complete per chosen rule.
+- [x] `event`: support at least one non-kill rule (survive timer or interaction marker).
+- [x] `boss`: boss death completes room.
+- [x] Keep door lock/unlock logic centralized in dungeon/run runtime system.
+- [x] Ensure transition continues to use existing fade timer and respects input lock during transition.
+- [ ] Add tests for completion rules and transition triggers.
 
-### 8.7 Visual/Debug Readability For Variety
-- [x] Provide clear visual differentiation by archetype using existing placeholder rendering approach (tint and/or sprite cell selection).
-- [x] Preserve elite readability layered over archetype visuals.
-- [x] Add debug overlay support for room enemy composition summary (counts by type, elite count/modifier) to aid tuning.
+### 7) UX and Debug Visibility
+- [x] Update debug overlay with template-focused data:
+- [x] Current template ID.
+- [x] Room type.
+- [x] Rotation.
+- [x] Remaining enemies / completion status.
+- [x] Update minimap coloring/icons by room type (`start/combat/elite/event/boss`).
+- [x] Add optional debug quick-load hook for a room template ID (dev-only path).
 
-### 8.8 Test Coverage And Verification Gates
-- [x] Add/extend deterministic tests in `app/world` for spawn director composition/ramp invariants.
-- [x] Add unit tests in `app/gameobjects` (or pure helper package if introduced) for enemy AI state transitions and intent decisions.
-- [x] Add tests for elite behavior application through combat/effect pipeline (at least one positive case).
-- [x] Ensure these package tests pass locally:
-  - `go test ./app/gamedata ./app/world ./app/gameobjects ./app/core`
-- [ ] If `raylib.dll` is available, also run:
-  - `go test -tags raylib ./app/game`
+### 8) Integration and Migration Safety
+- [x] Keep `RuntimePipeline` system order unchanged.
+- [x] Avoid behavior regressions in XP gain, reward state entry, and boss clear flow.
+- [x] Keep Windows-only assumptions and raylib compatibility.
+- [x] Do not introduce skill-name branching in dungeon flow logic.
 
-## Manual Smoke Checklist (Post-Implementation)
-- [ ] Run starts and room progression still works (doors lock until clear, transitions unchanged).
-- [ ] By mid-run, at least 4 distinct enemy archetypes are observed.
-- [ ] Ranged enemy projectiles and caster control behavior are readable and functional.
-- [ ] Elite enemies show a modifier-driven behavior beyond raw HP/damage.
-- [ ] A full run to boss/reward/results completes without crash.
+### 9) Test Plan and Acceptance
+- [x] Unit tests: parsing, validation, rotation, selection filters, compatibility.
+- [x] World tests: deterministic dungeon generation, no nil rooms, valid door targets.
+- [ ] Runtime tests: clear rules, lock/unlock transitions, boss-to-reward path.
+- [ ] Smoke check (manual):
+- [ ] Start run from class select.
+- [ ] Progress through mixed room types.
+- [ ] Event room appears in run (when configured).
+- [ ] Boss room is final.
+- [ ] Reward screen appears after boss clear.
+- [ ] Minimap and debug overlay reflect room progression.
 
-## Out Of Scope For This Step
-- Boss encounter redesign (backlog step 10).
-- Reward/item system expansion (backlog step 11).
-- Full dungeon/biome expansion beyond required enemy variety work for current biome.
+## Suggested File Touch Map (For Implementing Agent)
+- `app/world/dungeon.go`
+- `app/world/room.go`
+- `app/world/*_test.go` (expand existing tests)
+- `app/game/game.go`
+- `app/game/runtime_pipeline.go`
+- `app/game/ui_hud.go`
+- `app/systems/renderer.go` (only if room visual markers/debug are added)
+- New files likely in `app/world/`:
+- `room_template.go`
+- `room_template_loader.go`
+- `room_template_parser.go`
+- `room_template_registry.go`
+- `room_template_rotation.go`
+
+## Seed Content Added In This Refinement Pass
+- [x] Added starter sample templates under `assets/rooms/forest`:
+- [x] `forest_start_01`
+- [x] `forest_combat_small_01`
+- [x] `forest_combat_open_02`
+- [x] `forest_elite_01`
+- [x] `forest_event_shrine_01`
+- [x] `forest_boss_01`

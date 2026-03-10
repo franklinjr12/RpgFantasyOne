@@ -208,6 +208,20 @@ func (g *Game) updateBoot() {
 			systems.IconSheetHeight,
 			rl.DarkGray,
 		)
+		manager.LoadTexture(
+			systems.FloorAtlasAssetKey,
+			"resources/sprites/atlas_floor-16x16.png",
+			256,
+			256,
+			rl.DarkGray,
+		)
+		manager.LoadTexture(
+			systems.WallsHighAtlasAssetKey,
+			"resources/sprites/atlas_walls_high-16x32.png",
+			512,
+			1024,
+			rl.DarkGray,
+		)
 		manager.LoadFont(assets.FontDefault, "")
 		manager.LoadSound("sfx.ui.confirm", "resources/audio/ui_confirm.wav")
 		manager.LoadSound("sfx.skill.cast.melee", "resources/audio/skill_cast_melee.wav")
@@ -229,6 +243,46 @@ func (g *Game) EnterMainMenu() {
 
 func (g *Game) EnterClassSelect() {
 	g.State = StateClassSelect
+}
+
+func (g *Game) DebugLoadRoomTemplate(templateID string) error {
+	cfg := world.DefaultDungeonGenerationConfig()
+	dungeon, err := world.NewDebugDungeonFromTemplate(templateID, cfg)
+	if err != nil {
+		return err
+	}
+
+	if g.Player == nil {
+		g.Player = gameobjects.NewPlayer(0, 0, g.SelectedClass)
+	}
+
+	g.Dungeon = dungeon
+	g.CurrentRoom = dungeon.GetCurrentRoom()
+	if g.CurrentRoom == nil {
+		return fmt.Errorf("template %q produced no room", templateID)
+	}
+
+	startX := g.CurrentRoom.X + g.CurrentRoom.Width/2
+	startY := g.CurrentRoom.Y + g.CurrentRoom.Height/2
+	g.Player.PosX = startX - g.Player.Hitbox.Width/2
+	g.Player.PosY = startY - g.Player.Hitbox.Height/2
+	g.Player.HP = g.Player.MaxHP
+	g.Player.Alive = true
+
+	g.Projectiles = []*Projectile{}
+	g.EnemyProjectiles = []*EnemyProjectile{}
+	g.DelayedSkillEffects = []*DelayedSkillEffect{}
+	g.SkillVisualEffects = []*SkillVisualEffect{}
+	g.RoomTransitionTimer = 0
+	g.PendingRoomTransition = false
+
+	g.SpawnRoomEnemies()
+	if g.CurrentRoom != nil && !g.CurrentRoom.IsBoss() {
+		g.CurrentRoom.SetDoorsLocked(false)
+	}
+
+	g.State = StateRun
+	return nil
 }
 
 func (g *Game) StartRun() {
@@ -319,13 +373,15 @@ func (g *Game) SpawnRoomEnemies() {
 	g.Boss = nil
 
 	if g.CurrentRoom.IsBoss() {
-		bossX := g.CurrentRoom.X + g.CurrentRoom.Width/2
-		bossY := g.CurrentRoom.Y + g.CurrentRoom.Height/2
+		bossX, bossY := g.CurrentRoom.SpawnPoint()
 		g.Boss = gameobjects.NewBoss(bossX, bossY)
 	} else {
 		for _, enemyRef := range g.CurrentRoom.Enemies {
 			enemy := gameobjects.NewEnemyFromArchetype(enemyRef.X, enemyRef.Y, enemyRef.Type, enemyRef.IsElite, enemyRef.EliteModifier)
 			g.Enemies = append(g.Enemies, enemy)
+		}
+		if g.CurrentRoom.Type == world.RoomTypeEvent && g.CurrentRoom.EventDuration > 0 {
+			g.CurrentRoom.EventTimeLeft = g.CurrentRoom.EventDuration
 		}
 	}
 }
@@ -343,10 +399,30 @@ func (g *Game) CheckRoomCompletion() bool {
 		return false
 	}
 
+	if g.CurrentRoom.Type == world.RoomTypeEvent {
+		if g.CurrentRoom.EventTimeLeft <= 0 {
+			g.CurrentRoom.Completed = true
+			return true
+		}
+		return false
+	}
+
+	aliveEnemies := 0
+	aliveElites := 0
 	for _, enemy := range g.Enemies {
 		if enemy.Alive {
-			return false
+			aliveEnemies++
+			if enemy.IsElite {
+				aliveElites++
+			}
 		}
+	}
+
+	if g.CurrentRoom.Type == world.RoomTypeElite && aliveElites > 0 {
+		return false
+	}
+	if aliveEnemies > 0 {
+		return false
 	}
 
 	g.CurrentRoom.Completed = true
@@ -832,6 +908,13 @@ func (g *Game) GetDebugLines() []string {
 		}
 
 		lines = append(lines, fmt.Sprintf("Room: %d/%d", roomIndex, totalRooms))
+		if g.CurrentRoom != nil {
+			lines = append(lines, fmt.Sprintf("Template: %s", g.CurrentRoom.TemplateID))
+			lines = append(lines, fmt.Sprintf("Room type: %s (rot %d)", g.CurrentRoom.Type.String(), g.CurrentRoom.Rotation))
+			if g.CurrentRoom.Type == world.RoomTypeEvent {
+				lines = append(lines, fmt.Sprintf("Event timer: %.1fs", g.CurrentRoom.EventTimeLeft))
+			}
+		}
 		lines = append(lines, fmt.Sprintf("Enemies (alive/total): %d/%d", aliveEnemies, len(g.Enemies)))
 		if len(compositionCounts) > 0 {
 			compositionParts := make([]string, 0, len(compositionCounts))

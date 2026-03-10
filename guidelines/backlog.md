@@ -103,28 +103,28 @@
 ## 8) Enemies & AI Variety (Not a Tech Demo)
 > MVP should have a small but meaningful roster per biome + elites.
 
-- [ ] Enemy framework: stats, move/attack, aggro radius, state machine (idle/chase/attack/retreat optional)
-- [ ] Implement at least **6 enemies** for the MVP biome:
-  - [ ] 2 melee chasers (different speeds/HP)
-  - [ ] 1 ranged attacker (projectiles)
-  - [ ] 1 “caster” enemy (AoE or debuff)
-  - [ ] 1 tanky bruiser (slow but heavy)
-  - [ ] 1 swarmer (low HP, fast)
-- [ ] Elite modifier system (simple): +HP/+damage + one extra effect (e.g., burn/slow aura)
-- [ ] Spawn director per room (controls composition, difficulty ramp)
+- [x] Enemy framework: stats, move/attack, aggro radius, state machine (idle/chase/attack/retreat optional)
+- [x] Implement at least **6 enemies** for the MVP biome:
+  - [x] 2 melee chasers (different speeds/HP)
+  - [x] 1 ranged attacker (projectiles)
+  - [x] 1 “caster” enemy (AoE or debuff)
+  - [x] 1 tanky bruiser (slow but heavy)
+  - [x] 1 swarmer (low HP, fast)
+- [x] Elite modifier system (simple): +HP/+damage + one extra effect (e.g., burn/slow aura)
+- [x] Spawn director per room (controls composition, difficulty ramp)
 
 ---
 
 ## 9) Dungeon Generation & Room Flow (Replayable Runs)
 > Fixed-length, room-based, procedural, themed biome.
 
-- [ ] Biome 1: define visuals + enemy pool + reward pool theme
-- [ ] Procedural room generator (rect rooms + doors):
-  - [ ] 8–12 room run length (configurable)
-  - [ ] 1–2 mini-event rooms (e.g., shrine/heal or challenge) for variety
-  - [ ] Boss room at end
-- [ ] Room completion rules (kill all / kill elites / survive timer in one room type)
-- [ ] Door transition UX (fade, lock until clear, minimap update)
+- [x] Biome 1: define visuals + enemy pool + reward pool theme
+- [x] Procedural room generator (rect rooms + doors):
+  - [x] 8–12 room run length (configurable)
+  - [x] 1–2 mini-event rooms (e.g., shrine/heal or challenge) for variety
+  - [x] Boss room at end
+- [x] Room completion rules (kill all / kill elites / survive timer in one room type)
+- [x] Door transition UX (fade, lock until clear, minimap update)
 
 ---
 

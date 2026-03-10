@@ -1,8 +1,10 @@
 package world
 
 import (
+	"fmt"
 	"math"
 	"math/rand"
+	"strings"
 
 	"singlefantasy/app/gamedata"
 )
@@ -24,8 +26,14 @@ const (
 type RoomType int
 
 const (
-	RoomTypeNormal RoomType = iota
+	RoomTypeStart RoomType = iota
+	RoomTypeCombat
+	RoomTypeElite
+	RoomTypeEvent
+	RoomTypeReward
 	RoomTypeBoss
+
+	RoomTypeNormal = RoomTypeCombat
 )
 
 type AABB struct {
@@ -41,8 +49,110 @@ func (a AABB) ContainsPoint(x, y float32) bool {
 
 type Door struct {
 	Bounds          AABB
+	Direction       DoorDirection
+	MarkerX         int
+	MarkerY         int
 	Locked          bool
 	TargetRoomIndex int
+}
+
+type DoorDirection string
+
+const (
+	DoorDirectionNorth DoorDirection = "north"
+	DoorDirectionSouth DoorDirection = "south"
+	DoorDirectionEast  DoorDirection = "east"
+	DoorDirectionWest  DoorDirection = "west"
+)
+
+func ParseDoorDirection(value string) (DoorDirection, error) {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case string(DoorDirectionNorth):
+		return DoorDirectionNorth, nil
+	case string(DoorDirectionSouth):
+		return DoorDirectionSouth, nil
+	case string(DoorDirectionEast):
+		return DoorDirectionEast, nil
+	case string(DoorDirectionWest):
+		return DoorDirectionWest, nil
+	default:
+		return "", fmt.Errorf("unsupported door direction %q", value)
+	}
+}
+
+func (d DoorDirection) Opposite() DoorDirection {
+	switch d {
+	case DoorDirectionNorth:
+		return DoorDirectionSouth
+	case DoorDirectionSouth:
+		return DoorDirectionNorth
+	case DoorDirectionEast:
+		return DoorDirectionWest
+	case DoorDirectionWest:
+		return DoorDirectionEast
+	default:
+		return ""
+	}
+}
+
+func (d DoorDirection) IsValid() bool {
+	return d == DoorDirectionNorth || d == DoorDirectionSouth || d == DoorDirectionEast || d == DoorDirectionWest
+}
+
+type TileType int
+
+const (
+	TileWall TileType = iota
+	TileFloor
+	TileDoor
+	TileHazard
+	TileTrap
+)
+
+type SpawnType int
+
+const (
+	SpawnTypeNormal SpawnType = iota
+	SpawnTypeElite
+	SpawnTypeBoss
+)
+
+func ParseRoomType(value string) (RoomType, error) {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "start":
+		return RoomTypeStart, nil
+	case "combat":
+		return RoomTypeCombat, nil
+	case "elite":
+		return RoomTypeElite, nil
+	case "event":
+		return RoomTypeEvent, nil
+	case "reward":
+		return RoomTypeReward, nil
+	case "boss":
+		return RoomTypeBoss, nil
+	default:
+		return RoomTypeCombat, fmt.Errorf("unsupported room type %q", value)
+	}
+}
+
+func (r RoomType) String() string {
+	switch r {
+	case RoomTypeStart:
+		return "start"
+	case RoomTypeCombat:
+		return "combat"
+	case RoomTypeElite:
+		return "elite"
+	case RoomTypeEvent:
+		return "event"
+	case RoomTypeReward:
+		return "reward"
+	case RoomTypeBoss:
+		return "boss"
+	default:
+		return "combat"
+	}
 }
 
 type Room struct {
@@ -55,6 +165,17 @@ type Room struct {
 	Enemies          []*EnemyRef
 	Obstacles        []AABB
 	Doors            []*Door
+	Tiles            [][]TileType
+	TemplateID       string
+	Biome            string
+	Rotation         int
+	GridWidth        int
+	GridHeight       int
+	EventDuration    float32
+	EventTimeLeft    float32
+	BossSpawnX       float32
+	BossSpawnY       float32
+	HasBossSpawn     bool
 	Completed        bool
 }
 
@@ -88,12 +209,34 @@ func NewRoom(x, y float32, roomType RoomType, progressionIndex int) *Room {
 		Enemies:          []*EnemyRef{},
 		Obstacles:        []AABB{},
 		Doors:            []*Door{},
+		Tiles:            nil,
+		TemplateID:       "",
+		Biome:            "",
+		Rotation:         0,
+		GridWidth:        0,
+		GridHeight:       0,
+		EventDuration:    0,
+		EventTimeLeft:    0,
+		BossSpawnX:       0,
+		BossSpawnY:       0,
+		HasBossSpawn:     false,
 		Completed:        false,
 	}
 
-	if roomType == RoomTypeNormal {
+	if roomType == RoomTypeStart || roomType == RoomTypeCombat || roomType == RoomTypeElite || roomType == RoomTypeReward {
 		room.Obstacles = generateObstacles(room, rng)
 		room.Enemies = generateEnemies(room, rng, progressionIndex)
+		if roomType == RoomTypeElite && len(room.Enemies) > 0 {
+			room.Enemies[0].IsElite = true
+			modifiers := gamedata.EliteModifierTypes()
+			if len(modifiers) > 0 {
+				room.Enemies[0].EliteModifier = modifiers[0]
+			}
+		}
+	}
+	if roomType == RoomTypeEvent {
+		room.EventDuration = 12
+		room.EventTimeLeft = room.EventDuration
 	}
 
 	return room
@@ -103,11 +246,24 @@ func (r *Room) IsBoss() bool {
 	return r.Type == RoomTypeBoss
 }
 
+func (r *Room) IsEvent() bool {
+	return r.Type == RoomTypeEvent
+}
+
 func (r *Room) SpawnPoint() (float32, float32) {
+	if r.HasBossSpawn {
+		return r.BossSpawnX, r.BossSpawnY
+	}
 	return r.X + r.Width/2, r.Y + r.Height/2
 }
 
 func (r *Room) EntryPoint() (float32, float32) {
+	for _, door := range r.Doors {
+		if door == nil || door.Direction != DoorDirectionWest {
+			continue
+		}
+		return door.Bounds.X + door.Bounds.Width + 20, door.Bounds.Y + door.Bounds.Height/2
+	}
 	return r.X + 80, r.Y + r.Height/2
 }
 
@@ -118,6 +274,18 @@ func (r *Room) SetDoorsLocked(locked bool) {
 		}
 		door.Locked = locked
 	}
+}
+
+func (r *Room) DoorByDirection(direction DoorDirection) *Door {
+	for _, door := range r.Doors {
+		if door == nil {
+			continue
+		}
+		if door.Direction == direction {
+			return door
+		}
+	}
+	return nil
 }
 
 func newRoomRNG(x, y float32, roomType RoomType) *rand.Rand {

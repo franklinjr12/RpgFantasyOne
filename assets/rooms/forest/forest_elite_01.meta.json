@@ -1,0 +1,25 @@
+{
+  "id": "forest_elite_01",
+  "biome": "forest",
+  "type": "elite",
+  "difficulty": 2,
+  "weight": 4,
+  "allow_rotation": true,
+  "tags": [
+    "elite_anchor",
+    "mid_game",
+    "hazard_capable"
+  ],
+  "doors": [
+    {
+      "x": 0,
+      "y": 3,
+      "dir": "west"
+    },
+    {
+      "x": 11,
+      "y": 3,
+      "dir": "east"
+    }
+  ]
+}
