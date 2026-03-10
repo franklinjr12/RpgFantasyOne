@@ -20,12 +20,12 @@ func NewDungeon() *Dungeon {
 	roomSpacing := float32(RoomMaxWidth + 200)
 
 	for i := 0; i < DungeonLength; i++ {
-		room := NewRoom(x, y, RoomTypeNormal)
+		room := NewRoom(x, y, RoomTypeNormal, i)
 		dungeon.Rooms = append(dungeon.Rooms, room)
 		x += roomSpacing
 	}
 
-	bossRoom := NewRoom(x, y, RoomTypeBoss)
+	bossRoom := NewRoom(x, y, RoomTypeBoss, DungeonLength)
 	dungeon.Rooms = append(dungeon.Rooms, bossRoom)
 
 	dungeon.attachProgressionDoors()

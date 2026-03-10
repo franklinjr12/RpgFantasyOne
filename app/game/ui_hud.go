@@ -147,9 +147,8 @@ func (g *Game) drawTargetFrame() {
 		if t == nil || !t.IsAlive() {
 			return
 		}
-		name = "Enemy"
+		name = t.DisplayName()
 		if t.IsElite {
-			name = "Elite Enemy"
 			isElite = true
 		}
 		hp = t.HP

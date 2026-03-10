@@ -2,6 +2,8 @@ package game
 
 import (
 	"fmt"
+	"sort"
+	"strings"
 
 	"singlefantasy/app/assets"
 	"singlefantasy/app/gamedata"
@@ -41,6 +43,7 @@ type Game struct {
 	Dungeon                *world.Dungeon
 	Camera                 *systems.Camera
 	Projectiles            []*Projectile
+	EnemyProjectiles       []*EnemyProjectile
 	DelayedSkillEffects    []*DelayedSkillEffect
 	SkillVisualEffects     []*SkillVisualEffect
 	CurrentRoom            *world.Room
@@ -82,6 +85,20 @@ type Projectile struct {
 	DamageType gamedata.DamageType
 }
 
+type EnemyProjectile struct {
+	X          float32
+	Y          float32
+	VX         float32
+	VY         float32
+	Speed      float32
+	Damage     int
+	Radius     float32
+	Lifetime   float32
+	Alive      bool
+	DamageType gamedata.DamageType
+	Effects    []gamedata.EffectSpec
+}
+
 type DelayedSkillEffect struct {
 	X            float32
 	Y            float32
@@ -118,6 +135,7 @@ func NewGame(cfg settings.Settings) *Game {
 		Dungeon:                nil,
 		Camera:                 systems.NewCamera(),
 		Projectiles:            []*Projectile{},
+		EnemyProjectiles:       []*EnemyProjectile{},
 		DelayedSkillEffects:    []*DelayedSkillEffect{},
 		SkillVisualEffects:     []*SkillVisualEffect{},
 		CurrentRoom:            nil,
@@ -275,6 +293,7 @@ func (g *Game) ResetState() {
 	g.Boss = nil
 	g.Dungeon = nil
 	g.Projectiles = []*Projectile{}
+	g.EnemyProjectiles = []*EnemyProjectile{}
 	g.DelayedSkillEffects = []*DelayedSkillEffect{}
 	g.SkillVisualEffects = []*SkillVisualEffect{}
 	g.CurrentRoom = nil
@@ -305,7 +324,7 @@ func (g *Game) SpawnRoomEnemies() {
 		g.Boss = gameobjects.NewBoss(bossX, bossY)
 	} else {
 		for _, enemyRef := range g.CurrentRoom.Enemies {
-			enemy := gameobjects.NewEnemy(enemyRef.X, enemyRef.Y, enemyRef.IsElite)
+			enemy := gameobjects.NewEnemyFromArchetype(enemyRef.X, enemyRef.Y, enemyRef.Type, enemyRef.IsElite, enemyRef.EliteModifier)
 			g.Enemies = append(g.Enemies, enemy)
 		}
 	}
@@ -363,6 +382,7 @@ func (g *Game) AdvanceToNextRoom() {
 		g.CurrentRoom.SetDoorsLocked(true)
 	}
 	g.Projectiles = []*Projectile{}
+	g.EnemyProjectiles = []*EnemyProjectile{}
 	g.DelayedSkillEffects = []*DelayedSkillEffect{}
 	g.SkillVisualEffects = []*SkillVisualEffect{}
 	g.RoomTransitionTimer = 0
@@ -522,7 +542,7 @@ func (g *Game) drawRun() {
 		systems.DrawSkillCastPulse(visual.X, visual.Y, visual.Radius, visual.TimeLeft/visual.Duration, visual.Skill, visual.Filled, g.Camera)
 	}
 
-	queue := make([]systems.RenderQueueItem, 0, len(g.Enemies)+len(g.Projectiles)+4)
+	queue := make([]systems.RenderQueueItem, 0, len(g.Enemies)+len(g.Projectiles)+len(g.EnemyProjectiles)+4)
 	stableID := 0
 
 	for _, proj := range g.Projectiles {
@@ -554,6 +574,23 @@ func (g *Game) drawRun() {
 			StableID: stableID,
 			Draw: func() {
 				systems.DrawEnemy(targetEnemy, g.Camera)
+			},
+		})
+		stableID++
+	}
+
+	for _, proj := range g.EnemyProjectiles {
+		if !proj.Alive {
+			continue
+		}
+		depthY, depthX := systems.DepthSortKey(proj.X, proj.Y)
+		enemyProjectile := proj
+		queue = append(queue, systems.RenderQueueItem{
+			DepthY:   depthY,
+			DepthX:   depthX,
+			StableID: stableID,
+			Draw: func() {
+				systems.DrawEnemyProjectile(enemyProjectile.X, enemyProjectile.Y, enemyProjectile.Radius, g.Camera)
 			},
 		})
 		stableID++
@@ -762,9 +799,19 @@ func (g *Game) GetDebugLines() []string {
 		}
 
 		aliveEnemies := 0
+		compositionCounts := map[string]int{}
+		eliteCounts := map[string]int{}
 		for _, enemy := range g.Enemies {
 			if enemy.Alive {
 				aliveEnemies++
+				compositionCounts[enemy.Name]++
+				if enemy.IsElite {
+					modifier := enemy.EliteModifierName
+					if modifier == "" {
+						modifier = "Elite"
+					}
+					eliteCounts[modifier]++
+				}
 			}
 		}
 
@@ -786,7 +833,30 @@ func (g *Game) GetDebugLines() []string {
 
 		lines = append(lines, fmt.Sprintf("Room: %d/%d", roomIndex, totalRooms))
 		lines = append(lines, fmt.Sprintf("Enemies (alive/total): %d/%d", aliveEnemies, len(g.Enemies)))
-		lines = append(lines, fmt.Sprintf("Projectiles (player/boss): %d/%d", activeProjectiles, bossProjectiles))
+		if len(compositionCounts) > 0 {
+			compositionParts := make([]string, 0, len(compositionCounts))
+			for name, count := range compositionCounts {
+				compositionParts = append(compositionParts, fmt.Sprintf("%s:%d", name, count))
+			}
+			sort.Strings(compositionParts)
+			lines = append(lines, fmt.Sprintf("Enemy types: %s", strings.Join(compositionParts, ", ")))
+		}
+		if len(eliteCounts) > 0 {
+			eliteParts := make([]string, 0, len(eliteCounts))
+			for modifier, count := range eliteCounts {
+				eliteParts = append(eliteParts, fmt.Sprintf("%s:%d", modifier, count))
+			}
+			sort.Strings(eliteParts)
+			lines = append(lines, fmt.Sprintf("Elites: %s", strings.Join(eliteParts, ", ")))
+		}
+		enemyProjectiles := 0
+		for _, proj := range g.EnemyProjectiles {
+			if proj.Alive {
+				enemyProjectiles++
+			}
+		}
+
+		lines = append(lines, fmt.Sprintf("Projectiles (player/enemy/boss): %d/%d/%d", activeProjectiles, enemyProjectiles, bossProjectiles))
 		activeDelayed := 0
 		for _, delayed := range g.DelayedSkillEffects {
 			if delayed != nil && delayed.Alive {

@@ -32,6 +32,22 @@ func GetEnemyData(templateType EnemyTemplateType) EnemyTemplate {
 	return GetEnemyTemplate(templateType)
 }
 
+func GetEnemyArchetypeData(archetype EnemyArchetypeType) EnemyArchetype {
+	return GetEnemyArchetype(archetype)
+}
+
+func GetEnemyArchetypePool() []EnemyArchetypeType {
+	return EnemyArchetypeTypes()
+}
+
+func GetEliteModifierData(modifierType EliteModifierType) EliteModifier {
+	return GetEliteModifier(modifierType)
+}
+
+func GetEliteModifierPool() []EliteModifierType {
+	return EliteModifierTypes()
+}
+
 func GetWeaponData(classType ClassType) []*Item {
 	return GetWeaponPool(classType)
 }

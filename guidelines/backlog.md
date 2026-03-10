@@ -81,20 +81,20 @@
 > Each class must feel distinct and self-sufficient; 4 skills each implemented + tuned.
 
 - [x] Class: **Melee**
-  - [ ] Power Strike (burst)
-  - [ ] Guard Stance (damage reduction tradeoff)
-  - [ ] Blood Oath (lifesteal window)
-  - [ ] Shockwave Slam (AoE + slow)
+  - [x] Power Strike (burst)
+  - [x] Guard Stance (damage reduction tradeoff)
+  - [x] Blood Oath (lifesteal window)
+  - [x] Shockwave Slam (AoE + slow)
 - [x] Class: **Ranged**
-  - [ ] Quick Shot (DPS burst)
-  - [ ] Retreat Roll (mobility)
-  - [ ] Focused Aim (damage up, move down)
-  - [ ] Poison Tip (DoT / %HP tick tuned for bosses)
+  - [x] Quick Shot (DPS burst)
+  - [x] Retreat Roll (mobility)
+  - [x] Focused Aim (damage up, move down)
+  - [x] Poison Tip (DoT / %HP tick tuned for bosses)
 - [x] Class: **Caster**
-  - [ ] Arcane Bolt (nuke)
-  - [ ] Mana Shield (mana absorbs damage)
-  - [ ] Frost Field (AoE slow zone)
-  - [ ] Arcane Drain (AoE damage + mana sustain)
+  - [x] Arcane Bolt (nuke)
+  - [x] Mana Shield (mana absorbs damage)
+  - [x] Frost Field (AoE slow zone)
+  - [x] Arcane Drain (AoE damage + mana sustain)
 - [x] Skill VFX placeholders (simple particles/circles) + SFX hooks
 - [x] Skill tuning pass for readability and “one more run” feel
 
@@ -157,12 +157,12 @@
 
 ## 12) UI/UX (Must Be Playable and Clear)
 ### Menus
-- [ ] Main menu (Start Run, Settings, Quit)
-- [ ] Class select screen (summary stats + skill previews)
-- [ ] Pause menu (Resume, Restart Run, Settings, Exit to Menu)
-- [ ] Results screen (time, rooms cleared, boss killed, build summary)
-- [ ] Icons
-- [ ] Skill effects
+- [x] Main menu (Start Run, Settings, Quit)
+- [x] Class select screen (summary stats + skill previews)
+- [x] Pause menu (Resume, Restart Run, Settings, Exit to Menu)
+- [x] Results screen (time, rooms cleared, boss killed, build summary)
+- [x] Icons
+- [x] Skill effects
 
 ### In-Run HUD
 - [ ] Player HP bar + resource (mana/energy) bar

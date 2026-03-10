@@ -33,4 +33,14 @@ func TestDataAccessClassSkillEnemy(t *testing.T) {
 	if enemy.Damage <= 0 {
 		t.Fatalf("expected enemy damage > 0, got %d", enemy.Damage)
 	}
+
+	archetype := GetEnemyArchetypeData(EnemyArchetypeArcher)
+	if archetype.Name == "" {
+		t.Fatalf("expected enemy archetype name")
+	}
+
+	modifier := GetEliteModifierData(EliteModifierScorching)
+	if modifier.Name == "" {
+		t.Fatalf("expected elite modifier name")
+	}
 }

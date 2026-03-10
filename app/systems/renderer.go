@@ -137,16 +137,16 @@ func DrawEnemy(enemy *gameobjects.Enemy, camera *Camera) {
 
 	screenX, screenY := actorScreenRect(enemy.PosX, enemy.PosY, enemy.Hitbox.Width, enemy.Hitbox.Height, camera)
 
-	sourceRect := getSpriteSourceRect(2, 4)
+	sourceRect := enemySpriteSourceRect(enemy)
 	destRect := rl.NewRectangle(screenX, screenY, enemy.Hitbox.Width, enemy.Hitbox.Height)
 
-	tint := rl.White
+	tint := enemyArchetypeTint(enemy)
 	if enemy.HitFlashTimer > 0 {
 		tint = rl.Orange
 	} else if enemy.AttackFlashTimer > 0 {
 		tint = rl.Yellow
 	} else if enemy.IsElite {
-		tint = rl.NewColor(255, 200, 0, 255)
+		tint = blendColor(tint, rl.NewColor(255, 210, 96, 255), 0.55)
 	}
 
 	drawTextureOrRect(GetSpriteSheet(), sourceRect, destRect, tint, rl.Red)
@@ -308,6 +308,73 @@ func DrawBoss(boss *gameobjects.Boss, camera *Camera) {
 func DrawBossProjectile(x, y, radius float32, camera *Camera) {
 	screenX, screenY := WorldToScreenIso(x, y, camera)
 	rl.DrawCircle(int32(screenX), int32(screenY), radius, rl.Purple)
+}
+
+func DrawEnemyProjectile(x, y, radius float32, camera *Camera) {
+	screenX, screenY := WorldToScreenIso(x, y, camera)
+	rl.DrawCircle(int32(screenX), int32(screenY), radius, rl.NewColor(255, 140, 60, 255))
+}
+
+func enemySpriteSourceRect(enemy *gameobjects.Enemy) rl.Rectangle {
+	if enemy == nil {
+		return getSpriteSourceRect(2, 4)
+	}
+
+	switch enemy.Archetype {
+	case gamedata.EnemyArchetypeRaider:
+		return getSpriteSourceRect(2, 3)
+	case gamedata.EnemyArchetypePikeman:
+		return getSpriteSourceRect(2, 2)
+	case gamedata.EnemyArchetypeArcher:
+		return getSpriteSourceRect(2, 1)
+	case gamedata.EnemyArchetypeHexCaller:
+		return getSpriteSourceRect(1, 2)
+	case gamedata.EnemyArchetypeBrute:
+		return getSpriteSourceRect(2, 0)
+	case gamedata.EnemyArchetypeSwarmling:
+		return getSpriteSourceRect(1, 1)
+	default:
+		return getSpriteSourceRect(2, 3)
+	}
+}
+
+func enemyArchetypeTint(enemy *gameobjects.Enemy) rl.Color {
+	if enemy == nil {
+		return rl.White
+	}
+
+	switch enemy.Archetype {
+	case gamedata.EnemyArchetypeRaider:
+		return rl.NewColor(235, 132, 112, 255)
+	case gamedata.EnemyArchetypePikeman:
+		return rl.NewColor(210, 86, 86, 255)
+	case gamedata.EnemyArchetypeArcher:
+		return rl.NewColor(128, 210, 124, 255)
+	case gamedata.EnemyArchetypeHexCaller:
+		return rl.NewColor(122, 152, 246, 255)
+	case gamedata.EnemyArchetypeBrute:
+		return rl.NewColor(182, 132, 96, 255)
+	case gamedata.EnemyArchetypeSwarmling:
+		return rl.NewColor(248, 220, 118, 255)
+	default:
+		return rl.White
+	}
+}
+
+func blendColor(base, overlay rl.Color, strength float32) rl.Color {
+	if strength < 0 {
+		strength = 0
+	}
+	if strength > 1 {
+		strength = 1
+	}
+	inv := 1 - strength
+	return rl.NewColor(
+		uint8(float32(base.R)*inv+float32(overlay.R)*strength),
+		uint8(float32(base.G)*inv+float32(overlay.G)*strength),
+		uint8(float32(base.B)*inv+float32(overlay.B)*strength),
+		base.A,
+	)
 }
 
 func skillVisualStyle(skill *gamedata.Skill) (rl.Color, float32) {

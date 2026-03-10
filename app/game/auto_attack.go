@@ -12,6 +12,10 @@ type autoAttackTiming struct {
 }
 
 func (g *Game) ApplyPlayerDirectHit(damage int, sourceX, sourceY float32) bool {
+	return g.ApplyPlayerCombatHit(damage, gamedata.DamagePhysical, sourceX, sourceY, nil)
+}
+
+func (g *Game) ApplyPlayerCombatHit(damage int, damageType gamedata.DamageType, sourceX, sourceY float32, effects []gamedata.EffectSpec) bool {
 	if g.Player == nil || !g.Player.IsAlive() || damage <= 0 {
 		return false
 	}
@@ -22,7 +26,8 @@ func (g *Game) ApplyPlayerDirectHit(damage int, sourceX, sourceY float32) bool {
 	systems.ApplyCombatHit(systems.CombatHitRequest{
 		Target:        g.Player,
 		BaseDamage:    damage,
-		DamageType:    gamedata.DamagePhysical,
+		DamageType:    damageType,
+		Effects:       effects,
 		SuppressFlash: true,
 	})
 	g.Player.HitFlashTimer = PlayerHitFlashDuration

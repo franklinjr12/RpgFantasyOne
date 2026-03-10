@@ -140,7 +140,11 @@ func (s *aiSystem) Update(ctx *RuntimeContext, dt float32) {
 
 	playerX, playerY := g.Player.Center()
 	for _, enemy := range g.Enemies {
-		enemy.Update(dt, playerX, playerY)
+		if enemy == nil {
+			continue
+		}
+		enemy.Update(dt)
+		gameobjects.ResolveEnemyIntent(enemy, playerX, playerY)
 	}
 
 	if g.Boss == nil {
@@ -195,6 +199,7 @@ func (s *projectilesSystem) Update(ctx *RuntimeContext, dt float32) {
 	}
 
 	s.updateBossProjectiles(g, dt)
+	s.updateEnemyProjectiles(g, dt)
 	s.updateDelayedSkillEffects(g, dt)
 	s.updatePlayerProjectiles(g, dt)
 }
@@ -263,6 +268,44 @@ func (s *projectilesSystem) updatePlayerProjectiles(g *Game, dt float32) {
 	}
 }
 
+func (s *projectilesSystem) updateEnemyProjectiles(g *Game, dt float32) {
+	for i := len(g.EnemyProjectiles) - 1; i >= 0; i-- {
+		proj := g.EnemyProjectiles[i]
+		if proj == nil || !proj.Alive {
+			g.EnemyProjectiles = append(g.EnemyProjectiles[:i], g.EnemyProjectiles[i+1:]...)
+			continue
+		}
+
+		proj.Lifetime -= dt
+		if proj.Lifetime <= 0 {
+			proj.Alive = false
+			g.EnemyProjectiles = append(g.EnemyProjectiles[:i], g.EnemyProjectiles[i+1:]...)
+			continue
+		}
+
+		proj.X += proj.VX * dt
+		proj.Y += proj.VY * dt
+
+		playerCenterX, playerCenterY := g.Player.Center()
+		distance := systems.GetDistance(proj.X, proj.Y, playerCenterX, playerCenterY)
+		if distance <= proj.Radius+g.Player.Hitbox.Width/2 {
+			g.ApplyPlayerCombatHit(proj.Damage, proj.DamageType, proj.X, proj.Y, proj.Effects)
+			proj.Alive = false
+		}
+
+		if g.CurrentRoom != nil {
+			if proj.X < g.CurrentRoom.X || proj.X > g.CurrentRoom.X+g.CurrentRoom.Width ||
+				proj.Y < g.CurrentRoom.Y || proj.Y > g.CurrentRoom.Y+g.CurrentRoom.Height {
+				proj.Alive = false
+			}
+		}
+
+		if !proj.Alive {
+			g.EnemyProjectiles = append(g.EnemyProjectiles[:i], g.EnemyProjectiles[i+1:]...)
+		}
+	}
+}
+
 func (s *projectilesSystem) resolvePlayerProjectileHits(g *Game, proj *Projectile) {
 	for _, enemy := range g.Enemies {
 		if enemy == nil || !enemy.IsAlive() || !proj.Alive {
@@ -296,7 +339,11 @@ func (s *projectilesSystem) tryHitEnemy(g *Game, proj *Projectile, enemy *gameob
 	g.spawnSkillImpactVisual(proj.Skill, enemyX, enemyY)
 	g.playSkillImpactSFX(proj.Skill)
 	if wasAlive && !enemy.IsAlive() {
-		g.Player.GainXP(20)
+		reward := enemy.XPReward
+		if reward <= 0 {
+			reward = 20
+		}
+		g.Player.GainXP(reward)
 		if g.Player.Class.Type == gamedata.ClassTypeRanged {
 			g.Player.Heal(g.Player.Class.KillHealAmount)
 		}
@@ -588,6 +635,8 @@ func (s *movementSystem) Update(ctx *RuntimeContext, dt float32) {
 
 	g.Player.PosX = newX
 	g.Player.PosY = newY
+
+	s.updateEnemies(g, dt)
 }
 
 func (s *movementSystem) updatePlayerFacing(g *Game, horizontalVelocity float32) {
@@ -616,6 +665,67 @@ func (s *movementSystem) updatePlayerFacing(g *Game, horizontalVelocity float32)
 	}
 }
 
+func (s *movementSystem) updateEnemies(g *Game, dt float32) {
+	for _, enemy := range g.Enemies {
+		if enemy == nil || !enemy.IsAlive() {
+			continue
+		}
+		if !gamedata.CanAct(&enemy.Effects) {
+			continue
+		}
+
+		speed := enemy.MoveSpeed * gamedata.MoveSpeedMultiplier(&enemy.Effects)
+		if speed <= 0 {
+			continue
+		}
+
+		moveDeltaX := enemy.IntentMoveX * speed * dt
+		moveDeltaY := enemy.IntentMoveY * speed * dt
+		if moveDeltaX == 0 && moveDeltaY == 0 {
+			continue
+		}
+
+		nextX := enemy.PosX + moveDeltaX
+		nextY := enemy.PosY + moveDeltaY
+		if g.CurrentRoom != nil {
+			minX := g.CurrentRoom.X
+			minY := g.CurrentRoom.Y
+			maxX := g.CurrentRoom.X + g.CurrentRoom.Width - enemy.Hitbox.Width
+			maxY := g.CurrentRoom.Y + g.CurrentRoom.Height - enemy.Hitbox.Height
+			if nextX < minX {
+				nextX = minX
+			}
+			if nextX > maxX {
+				nextX = maxX
+			}
+			if nextY < minY {
+				nextY = minY
+			}
+			if nextY > maxY {
+				nextY = maxY
+			}
+
+			candidate := world.AABB{X: nextX, Y: nextY, Width: enemy.Hitbox.Width, Height: enemy.Hitbox.Height}
+			if overlapsRoomObstacle(candidate, g.CurrentRoom.Obstacles) {
+				nextX = enemy.PosX
+				nextY = enemy.PosY
+			}
+		}
+
+		enemy.PosX = nextX
+		enemy.PosY = nextY
+	}
+}
+
+func overlapsRoomObstacle(candidate world.AABB, obstacles []world.AABB) bool {
+	for _, obstacle := range obstacles {
+		if systems.AABBOverlap(candidate, obstacle) {
+			return true
+		}
+	}
+	return false
+}
+
 type combatResolveSystem struct{}
 
 func (s *combatResolveSystem) Name() string { return "Combat Resolve" }
@@ -626,15 +736,56 @@ func (s *combatResolveSystem) Update(ctx *RuntimeContext, _ float32) {
 		return
 	}
 
+	playerX, playerY := g.Player.Center()
 	for _, enemy := range g.Enemies {
-		hit, damage, sourceX, sourceY := enemy.Attack()
-		if hit {
-			g.ApplyPlayerDirectHit(damage, sourceX, sourceY)
+		if enemy == nil {
+			continue
 		}
+		hit, payload := enemy.Attack(playerX, playerY)
+		if !hit {
+			continue
+		}
+
+		if payload.AttackMode == gamedata.EnemyAttackProjectile {
+			dx := playerX - payload.SourceX
+			dy := playerY - payload.SourceY
+			distance := systems.GetDistance(0, 0, dx, dy)
+			if distance <= 0 {
+				distance = 1
+			}
+			lifetime := payload.ProjectileLifetime
+			if lifetime <= 0 {
+				lifetime = 2.0
+			}
+			radius := payload.ProjectileRadius
+			if radius <= 0 {
+				radius = 6
+			}
+			speed := payload.ProjectileSpeed
+			if speed <= 0 {
+				speed = 220
+			}
+			g.EnemyProjectiles = append(g.EnemyProjectiles, &EnemyProjectile{
+				X:          payload.SourceX,
+				Y:          payload.SourceY,
+				VX:         (dx / distance) * speed,
+				VY:         (dy / distance) * speed,
+				Speed:      speed,
+				Damage:     payload.Damage,
+				Radius:     radius,
+				Lifetime:   lifetime,
+				Alive:      true,
+				DamageType: payload.DamageType,
+				Effects:    payload.OnHitEffects,
+			})
+			continue
+		}
+
+		g.ApplyPlayerCombatHit(payload.Damage, payload.DamageType, payload.SourceX, payload.SourceY, payload.OnHitEffects)
 	}
 
 	if g.Boss != nil {
-		hit, damage, sourceX, sourceY := g.Boss.Attack()
+		hit, damage, sourceX, sourceY := g.Boss.Attack(playerX, playerY)
 		if hit {
 			g.ApplyPlayerDirectHit(damage, sourceX, sourceY)
 		}

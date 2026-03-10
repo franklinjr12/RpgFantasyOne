@@ -70,7 +70,8 @@ func (b *Boss) Update(deltaTime float32, playerX, playerY float32) {
 		b.Phase = BossPhase1
 	}
 
-	b.Enemy.Update(deltaTime, playerX, playerY)
+	b.Enemy.Update(deltaTime)
+	ResolveEnemyIntent(b.Enemy, playerX, playerY)
 
 	b.TelegraphTimer -= deltaTime
 	b.AddSpawnTimer -= deltaTime
@@ -113,6 +114,14 @@ func (b *Boss) Update(deltaTime float32, playerX, playerY float32) {
 			}
 		}
 	}
+}
+
+func (b *Boss) Attack(playerX, playerY float32) (bool, int, float32, float32) {
+	hit, payload := b.Enemy.Attack(playerX, playerY)
+	if !hit {
+		return false, 0, 0, 0
+	}
+	return true, payload.Damage, payload.SourceX, payload.SourceY
 }
 
 func (b *Boss) ShouldSpawnAdds() bool {
