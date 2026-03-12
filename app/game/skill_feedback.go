@@ -1,7 +1,6 @@
 package game
 
 import (
-	"singlefantasy/app/assets"
 	"singlefantasy/app/gamedata"
 	"singlefantasy/app/systems"
 )
@@ -83,32 +82,22 @@ func (g *Game) playSkillCastSFX(skill *gamedata.Skill) {
 	if skill == nil {
 		return
 	}
-	assets.Get().PlaySound(skillCastSFXKey(skill))
+	g.playSound(skillCastSFXKey(skill))
 }
 
 func (g *Game) playSkillImpactSFX(skill *gamedata.Skill) {
 	if skill == nil {
 		return
 	}
-	assets.Get().PlaySound(skillImpactSFXKey(skill))
+	g.playSound(skillImpactSFXKey(skill))
 }
 
 func skillCastSFXKey(skill *gamedata.Skill) string {
-	switch skill.Type {
-	case gamedata.SkillTypePowerStrike, gamedata.SkillTypeGuardStance, gamedata.SkillTypeBloodOath, gamedata.SkillTypeShockwaveSlam:
-		return "sfx.skill.cast.melee"
-	case gamedata.SkillTypeQuickShot, gamedata.SkillTypeRetreatRoll, gamedata.SkillTypeFocusedAim, gamedata.SkillTypePoisonTip:
-		return "sfx.skill.cast.ranged"
-	default:
-		return "sfx.skill.cast.caster"
-	}
+	return sfxPlayerCast
 }
 
 func skillImpactSFXKey(skill *gamedata.Skill) string {
-	if skill.DamageSpec != nil && skill.DamageSpec.DamageType == gamedata.DamageMagical {
-		return "sfx.skill.impact.magic"
-	}
-	return "sfx.skill.impact.physical"
+	return sfxEnemyHit
 }
 
 func castVisualRadius(skill *gamedata.Skill) float32 {

@@ -54,7 +54,6 @@ func (g *Game) resolveAndApplySkill(skill *gamedata.Skill, intent systems.CastIn
 	if len(targets) > 0 {
 		impactX, impactY := resolveImpactCenter(intent, targets[0])
 		g.spawnSkillImpactVisual(skill, impactX, impactY)
-		g.playSkillImpactSFX(skill)
 	}
 	return len(targets)
 }

@@ -1,100 +1,103 @@
-# Current Task Refinement - Backlog Item 12 Combat Feedback
+# Current Task Refinement - Backlog Item 13 Audio & Juice (Enough to Feel Good)
 
 ## Refined Scope
-- Source backlog slice: `12) UI/UX (Must Be Playable and Clear) -> Combat Feedback`
+- Source backlog slice: `13) Audio & Juice (Enough to Feel Good)`
 - Required outcomes:
-- [x] Floating damage numbers (crit styling)
-- [x] Floating heal numbers
-- [x] Status text popups (for example: `Stunned`, `Silenced`)
-- [x] Telegraph indicators (AoE circles and line attacks)
-- [x] Hit flashes
+- [x] Basic SFX set wired into runtime
+- [x] Player hit / enemy hit feedback sounds
+- [x] Skill cast / projectile impact sounds
+- [x] Player healing sound with anti-annoyance rules
+- [x] Player level up sound
+- [x] Door open sound
+
+## Asset Grounding (Use Existing Files Only)
+- [x] Use `resources/sounds/player_damage_taken.wav` for player damage taken.
+- [x] Use `resources/sounds/enemy_damage_taken.wav` for enemy/boss damage taken.
+- [x] Use `resources/sounds/player_cast.wav` for player skill cast.
+- [x] Use `resources/sounds/enemy_cast.wav` for enemy projectile cast windup/fire.
+- [x] Use `resources/sounds/player_healing.mp3` for player healing events that match healing policy.
+- [x] Use `resources/sounds/level_up.mp3` for player level-up.
+- [x] Use `resources/sounds/door_open.mp3` for room door unlock/open moment.
 
 ## Current Code Reality (Grounding)
-- Existing and already usable:
-- [x] Entity hit flashes are rendered (`DrawPlayer`, `DrawEnemy`, `DrawBoss`) via `HitFlashTimer`.
-- [x] AoE telegraphs exist for delayed skills and boss mechanics (`DrawDelayedTelegraph`, boss zone/heavy telegraph rendering).
-- [x] Skill cast/impact pulse visuals exist (`SkillVisualEffects`, `DrawSkillCastPulse`).
-- Missing or incomplete for backlog completion:
-- [x] No floating combat text system for damage/heal/status.
-- [x] No crit-specific floating text styling.
-- [x] No line telegraph visualization for directional attacks.
-- [x] Combat feedback spawning is not centralized; damage application happens across multiple paths.
+- [x] `updateBoot` now loads step-13 SFX from `resources/sounds/...`.
+- [x] Player cast SFX is routed through `app/game/skill_feedback.go` using the new sound keys.
+- [x] Explicit SFX hooks now exist for:
+- [x] player hit
+- [x] enemy hit
+- [x] healing policy differentiation
+- [x] level up
+- [x] door open on unlock transition
+- [x] Door-open playback uses unlock edge detection in `dungeonRunSystem.Update` to avoid per-frame replay.
 
 ## Constraints (Do Not Drift)
-- [x] Preserve current gameplay outcomes (damage, cooldowns, room flow, XP/reward behavior).
-- [x] Keep runtime order intact (`Input -> AI -> Casting -> Projectiles -> Movement -> Combat Resolve -> Effects -> Dungeon/Run -> UI/Render Prep`).
-- [x] Keep Windows/raylib assumptions.
-- [x] Prefer `gamedata` effect/damage types; do not introduce duplicate domain structs in `systems`.
+- [x] Preserve existing combat outcomes, XP flow, room progression, and state transitions.
+- [x] Keep pipeline order unchanged.
+- [x] Keep fallback-safe behavior when audio device is unavailable (`AssetManager` no-op behavior remains valid).
+- [x] Do not introduce skill-name branching in core resolver logic beyond localized SFX policy helpers.
+- [x] Follow healing sound rule from product note:
+- [x] Do not stack passive per-hit lifesteal heal SFX with hit SFX.
+- [x] Only play healing SFX for explicit active-skill healing moments (not passive on-hit class lifesteal ticks).
 
 ## Task Backlog
 
-### 1) Create Combat Feedback Runtime Model
-- [x] Add a dedicated combat feedback model in `app/game` for transient UI events (damage text, heal text, status text, directional telegraph visuals).
-- [x] Add `Game` state fields for active feedback events and clear them in all run/reset transitions (`NewGame`, `ResetState`, `StartRun`, `AdvanceToNextRoom`, debug room load).
-- [x] Add update lifecycle for feedback events in fixed update path (timer decay, upward drift, fade-out, cleanup).
-- [x] Add draw lifecycle in `drawRun` after world entities and before HUD so text is readable but not hidden by terrain.
-- [x] Add combat feedback tuning constants in `app/game/config.go` (durations, rise speed, alpha fade, crit scale, status text duration).
+### 1) Create Audio Event Keys and Policy Helpers
+- [x] Add a centralized SFX key list in `app/game` (for example: player hit, enemy hit, cast player, cast enemy, heal, level up, door open).
+- [x] Add small helper functions that decide which SFX to play for:
+- [x] damage target type (player vs enemy/boss)
+- [x] healing source type (active-skill heal vs passive lifesteal/kill-heal)
+- [x] Ensure helpers are deterministic and testable without requiring real audio playback.
 
-### 2) Centralize Damage/Heal Feedback Emission
-- [x] Add `game`-layer wrappers around hit application so combat outcomes and UI feedback are emitted together.
-- [x] Route all player->enemy/boss hit paths through wrappers:
-- [x] auto-attacks in `app/game/auto_attack.go`
-- [x] skill instant/projectile/delayed application paths (`skills_handler.go`, `runtime_pipeline.go`)
-- [x] Route enemy/boss->player hit paths through wrapper (`ApplyPlayerCombatHit` already central; extend it for feedback emission).
-- [x] Use applied HP delta (before/after) to spawn damage/heal text accurately after mitigation and shields.
-- [x] Use resolver crit result to style crit damage text (size/color/prefix like `CRIT` or `!`).
+### 2) Migrate Boot Sound Loading to `resources/sounds`
+- [x] Replace current missing `resources/audio/*.wav` skill sound loads with the `resources/sounds/*` files listed above.
+- [x] Keep non-step-13 audio (menu music/confirm) untouched unless it blocks compilation or startup.
+- [x] Ensure all new SFX keys are loaded in `updateBoot`.
 
-### 3) Implement Floating Damage Numbers (Crit Styling)
-- [x] Spawn floating damage text on every successful combat hit with `AppliedDamage > 0`.
-- [x] Differentiate friendly/enemy damage colors for readability (player taking damage vs enemies taking damage).
-- [x] Apply crit styling when `DamageResult.IsCrit == true` (larger scale, stronger color, optional bounce).
-- [x] Prevent overlap clutter: apply small deterministic per-event horizontal jitter and stack offset.
-- [x] Add deterministic tests for event spawn count/value/style flags from representative hit paths.
+### 3) Wire Player/Enemy Hit and Projectile Impact SFX Through Combat Resolution Paths
+- [x] Trigger player-hit SFX when `ApplyPlayerCombatHit` successfully applies damage (`AppliedDamage > 0`).
+- [x] Trigger enemy-hit SFX when player attacks/skills/projectiles apply damage to enemy or boss.
+- [x] Ensure projectile impacts are naturally covered by the same hit-based hooks (no duplicate impact+hurt layering on the same hit event).
+- [x] Add a lightweight anti-spam guard (small per-key cooldown) if multi-target hits produce excessive simultaneous overlaps.
 
-### 4) Implement Floating Heal Numbers
-- [x] Spawn heal text on player healing from:
-- [x] class/item lifesteal during combat hit resolution
-- [x] ranged kill-heal bonuses in projectile kill branches
-- [x] Keep displayed value clamped to effective heal gained (not attempted heal amount).
-- [x] Style heal text distinctly (green palette and `+` prefix).
-- [x] Add tests covering lifesteal and kill-heal popup emission.
+### 4) Keep Skill Cast Audio Readable
+- [x] Keep cast SFX on successful player skill cast in `TryCastSkill`.
+- [x] Use `player_cast.wav` for player casts.
+- [x] Play `enemy_cast.wav` when enemy projectile attacks are spawned in combat resolution.
 
-### 5) Implement Status Text Popups
-- [x] Add effect-to-label mapper in `gamedata` or `game` (for example: `EffectStun -> STUNNED`, `EffectSilence -> SILENCED`, `EffectFreeze -> FROZEN`).
-- [x] On successful application of control/debuff effects, spawn short-lived status popups at target position.
-- [x] Deduplicate repeated status labels per hit event (do not emit duplicate identical labels from one application batch).
-- [x] Ensure both enemy targets and player target can receive status popups.
-- [x] Add tests for at least stun/silence/slow popup emission and dedupe behavior.
+### 5) Implement Healing SFX Policy (Warrior Lifesteal Noise Control)
+- [x] Classify healing feedback calls by source (at minimum: passive on-hit lifesteal, kill-heal, active-skill heal).
+- [x] Do not play healing SFX for passive lifesteal ticks caused by normal attacks/on-hit hooks.
+- [x] Do not play healing SFX for passive kill-heal unless design explicitly reclassifies it as active.
+- [x] Play healing SFX only for explicit active-skill healing moments.
+- [x] Keep floating heal numbers intact regardless of SFX policy.
 
-### 6) Complete Telegraph Indicators (AoE + Line)
-- [x] Keep current AoE telegraph rendering intact and move shared styling knobs to config constants.
-- [x] Add directional/line telegraph visual support for directional attacks (minimum: player directional skills such as `Shockwave Slam`).
-- [x] Represent line telegraph using world-space start/end derived from cast intent and targeting range.
-- [x] Add renderer helper(s) in `app/systems/renderer.go` for line telegraph draw and optional endpoint marker.
-- [x] Spawn directional telegraph events with short lifetime in cast feedback path (`skill_feedback.go`).
+### 6) Add Level-Up SFX Hook
+- [x] Add a game-layer XP grant helper (or equivalent) that can detect level-up transitions safely.
+- [x] Route all runtime XP grants through that helper.
+- [x] Play `level_up.mp3` once per level-up event (handle multi-level gains by playing per level gained, capped if needed for sanity).
 
-### 7) Hit Flash Completion and Validation
-- [x] Audit all damage sources and confirm hit flash timer is triggered for player/enemy/boss across direct hits, projectiles, skill hits, and DoT ticks where intended.
-- [x] Normalize flash durations/colors through constants to avoid hardcoded duplicates (`0.2`, etc.).
-- [x] Add/adjust tests to validate flash timer activation for representative damage paths.
+### 7) Add Door Open SFX Hook
+- [x] Detect room door transition from locked -> unlocked in `dungeonRunSystem.Update`.
+- [x] Play `door_open.mp3` once when doors become available after room clear.
+- [x] Prevent replay every frame while doors remain unlocked.
+- [x] Ensure no door-open sound plays for boss reward transition (where doors are not part of progression).
 
-### 8) QA, Testing, and Backlog Closeout
-- [x] Add targeted tests in `app/game` (raylib-tagged) for combat feedback event emission logic.
-- [x] Add targeted tests in `app/systems` only if resolver contracts are extended (resolver contracts unchanged; no additional `app/systems` tests required).
-- [ ] Validate package tests with:
+### 8) Tests and Verification
+- [x] Add/extend tests in `app/game` for:
+- [x] hit SFX routing (player target vs enemy target)
+- [x] healing SFX suppression for passive lifesteal
+- [x] level-up SFX trigger on XP threshold crossing
+- [x] door-open SFX single-trigger on unlock edge
+- [x] Use a test seam for sound playback capture (function injection/wrapper), instead of requiring actual audio hardware.
+- [ ] Run targeted tests:
 - [ ] `go test ./app/game -tags raylib`
-- [ ] `go test ./app/systems -tags raylib`
 - [x] `go test ./app/gamedata ./app/gameobjects ./app/world`
-- Note: `go test` runs for raylib-tagged packages are currently blocked in this environment because `raylib.dll` is not available at runtime.
-- [ ] Perform manual smoke checklist in one run per class:
-- [ ] Crit and non-crit damage numbers are visually distinct.
-- [ ] Heal numbers appear for lifesteal/kill-heal.
-- [ ] Stun/silence/slow popups are readable and short-lived.
-- [ ] AoE and directional line telegraphs are clear and non-blocking.
-- [ ] Hit flashes remain readable without overwhelming sprites.
+- Note: `go test ./app/game -tags raylib` is blocked in this environment because `raylib.dll` is not available at runtime.
+- [ ] Run one manual smoke pass per class and verify audible outcomes for all backlog bullets.
 
 ## Definition of Done
-- [ ] All five combat feedback backlog bullets are implemented and visibly verifiable in-run.
-- [ ] No gameplay regressions in core loop/state transitions.
-- [ ] New tests pass in supported raylib-tagged workflow.
-- [ ] `guidelines/backlog.md` item `12 -> Combat Feedback` can be checked off.
+- [ ] All step-13 bullets are behaviorally implemented and audible using `resources/sounds`.
+- [x] Warrior/passive lifesteal no longer creates hit+heal sound spam on each hit.
+- [x] Door open, level up, and cast/impact sounds trigger at correct gameplay moments without per-frame spam.
+- [ ] Existing gameplay behavior remains unchanged beyond audio feedback.
+- [ ] `guidelines/backlog.md` item `13) Audio & Juice` can be checked off.

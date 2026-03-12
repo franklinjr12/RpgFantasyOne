@@ -157,7 +157,7 @@ func (g *Game) resolveMeleeAutoAttack(damage int) {
 			UseSourceModifiers: false,
 		})
 		if wasAlive && !t.IsAlive() {
-			g.Player.GainXP(20)
+			g.grantPlayerXP(20)
 			g.PlayerAttackTarget = nil
 		}
 	case *gameobjects.Boss:
@@ -172,7 +172,7 @@ func (g *Game) resolveMeleeAutoAttack(damage int) {
 			UseSourceModifiers: false,
 		})
 		if wasAlive && !t.IsAlive() {
-			g.Player.GainXP(100)
+			g.grantPlayerXP(100)
 			g.PlayerAttackTarget = nil
 		}
 	}
@@ -245,7 +245,7 @@ func (g *Game) resolveCasterAutoAttack(damage int) {
 		})
 		g.Player.UseMana(g.Player.Class.ManaCost)
 		if wasAlive && !t.IsAlive() {
-			g.Player.GainXP(20)
+			g.grantPlayerXP(20)
 			g.PlayerAttackTarget = nil
 		}
 	case *gameobjects.Boss:
@@ -261,7 +261,7 @@ func (g *Game) resolveCasterAutoAttack(damage int) {
 		})
 		g.Player.UseMana(g.Player.Class.ManaCost)
 		if wasAlive && !t.IsAlive() {
-			g.Player.GainXP(100)
+			g.grantPlayerXP(100)
 			g.PlayerAttackTarget = nil
 		}
 	}

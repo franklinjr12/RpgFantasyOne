@@ -326,13 +326,12 @@ func (s *projectilesSystem) tryHitEnemy(g *Game, proj *Projectile, enemy *gameob
 	s.applyProjectileHit(g, proj, enemy)
 	markProjectileTargetHit(proj, enemy)
 	g.spawnSkillImpactVisual(proj.Skill, enemyX, enemyY)
-	g.playSkillImpactSFX(proj.Skill)
 	if wasAlive && !enemy.IsAlive() {
 		reward := enemy.XPReward
 		if reward <= 0 {
 			reward = 20
 		}
-		g.Player.GainXP(reward)
+		g.grantPlayerXP(reward)
 		if g.Player.Class.Type == gamedata.ClassTypeRanged {
 			g.healPlayerWithFeedback(g.Player.Class.KillHealAmount)
 		}
@@ -361,9 +360,8 @@ func (s *projectilesSystem) tryHitBoss(g *Game, proj *Projectile, boss *gameobje
 	s.applyProjectileHit(g, proj, boss)
 	markProjectileTargetHit(proj, boss)
 	g.spawnSkillImpactVisual(proj.Skill, bossX, bossY)
-	g.playSkillImpactSFX(proj.Skill)
 	if wasAlive && !boss.IsAlive() {
-		g.Player.GainXP(100)
+		g.grantPlayerXP(100)
 		if g.Player.Class.Type == gamedata.ClassTypeRanged {
 			g.healPlayerWithFeedback(g.Player.Class.KillHealAmount * 5)
 		}
@@ -415,7 +413,6 @@ func (s *projectilesSystem) updateDelayedSkillEffects(g *Game, dt float32) {
 			targetsHit := s.applyDelayedSkill(g, delayed)
 			if targetsHit > 0 {
 				g.spawnSkillImpactVisual(delayed.Skill, delayed.LastAppliedX, delayed.LastAppliedY)
-				g.playSkillImpactSFX(delayed.Skill)
 			}
 
 			if delayed.ActiveTime <= 0 || delayed.TickRate <= 0 {
@@ -438,7 +435,6 @@ func (s *projectilesSystem) updateDelayedSkillEffects(g *Game, dt float32) {
 			targetsHit := s.applyDelayedSkill(g, delayed)
 			if targetsHit > 0 {
 				g.spawnSkillImpactVisual(delayed.Skill, delayed.LastAppliedX, delayed.LastAppliedY)
-				g.playSkillImpactSFX(delayed.Skill)
 			}
 		}
 
@@ -770,6 +766,7 @@ func (s *combatResolveSystem) Update(ctx *RuntimeContext, _ float32) {
 				DamageType: payload.DamageType,
 				Effects:    payload.OnHitEffects,
 			})
+			g.playSound(sfxEnemyCast)
 			continue
 		}
 
@@ -811,6 +808,7 @@ func (s *effectsSystem) Update(ctx *RuntimeContext, dt float32) {
 		return
 	}
 
+	g.updateSoundCooldowns(dt)
 	g.updateSkillVisualEffects(dt)
 	g.updateCombatFeedback(dt)
 	if ctx.IsMenuOpen || g.Player == nil {
@@ -866,7 +864,11 @@ func (s *dungeonRunSystem) Update(ctx *RuntimeContext, dt float32) {
 		}
 
 		if !g.CurrentRoom.IsBoss() {
+			hadLockedDoor := roomHasLockedDoor(g.CurrentRoom)
 			g.CurrentRoom.SetDoorsLocked(!roomCleared)
+			if roomCleared && hadLockedDoor && roomHasUnlockedDoor(g.CurrentRoom) {
+				g.playSound(sfxDoorOpen)
+			}
 		}
 
 		if roomCleared && !g.CurrentRoom.IsBoss() && !g.PendingRoomTransition && g.RoomTransitionTimer == 0 {
@@ -899,6 +901,30 @@ func (s *dungeonRunSystem) Update(ctx *RuntimeContext, dt float32) {
 		playerCenterX, playerCenterY := g.Player.Center()
 		systems.UpdateCamera(g.Camera, playerCenterX, playerCenterY, worldWidth, worldHeight)
 	}
+}
+
+func roomHasLockedDoor(room *world.Room) bool {
+	if room == nil {
+		return false
+	}
+	for _, door := range room.Doors {
+		if door != nil && door.Locked {
+			return true
+		}
+	}
+	return false
+}
+
+func roomHasUnlockedDoor(room *world.Room) bool {
+	if room == nil {
+		return false
+	}
+	for _, door := range room.Doors {
+		if door != nil && !door.Locked {
+			return true
+		}
+	}
+	return false
 }
 
 type uiRenderPrepSystem struct{}

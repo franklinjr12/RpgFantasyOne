@@ -85,6 +85,7 @@ func (g *Game) applyCombatHitWithFeedback(request systems.CombatHitRequest) syst
 	result := systems.ApplyCombatHit(request)
 	if result.Damage.AppliedDamage > 0 {
 		g.spawnDamageCombatText(request.Target, result.Damage.AppliedDamage, result.Damage.IsCrit, isPlayerTarget(request.Target))
+		g.playDamageSFX(request.Target)
 	}
 	if result.EffectsApplied > 0 {
 		g.spawnStatusPopupsForTarget(request.Target, feedbackEffectsFromRequest(request))
@@ -95,6 +96,7 @@ func (g *Game) applyCombatHitWithFeedback(request systems.CombatHitRequest) syst
 		if healed > 0 {
 			x, y := request.Caster.Center()
 			g.spawnHealCombatText(x, y, healed)
+			g.playHealingSFX(healingSoundPassiveOnHit)
 		}
 	}
 
@@ -117,18 +119,7 @@ func isPlayerTarget(target interface{}) bool {
 }
 
 func (g *Game) healPlayerWithFeedback(amount int) int {
-	if g == nil || g.Player == nil || amount <= 0 {
-		return 0
-	}
-
-	before := g.Player.HP
-	g.Player.Heal(amount)
-	healed := g.Player.HP - before
-	if healed > 0 {
-		x, y := g.Player.Center()
-		g.spawnHealCombatText(x, y, healed)
-	}
-	return healed
+	return g.healPlayerWithFeedbackSource(amount, healingSoundKillReward)
 }
 
 func (g *Game) spawnDamageCombatText(target interface{}, amount int, isCrit bool, targetIsPlayer bool) {

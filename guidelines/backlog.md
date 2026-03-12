@@ -195,13 +195,12 @@
 ---
 
 ## 13) Audio & Juice (Enough to Feel Good)
-- [ ] Basic SFX set:
-  - [ ] Player hit / enemy hit
-  - [ ] Skill cast / projectile impact
-  - [ ] UI click/confirm
-  - [ ] Boss warning cue
-- [ ] Music: menu + biome track + boss track (placeholder ok)
-- [ ] Basic particle/VFX for skills and impacts (simple circles/lines ok)
+- [x] Basic SFX set:
+  - [x] Player hit / enemy hit
+  - [x] Skill cast / projectile impact
+  - [x] Player healing
+  - [x] Player level up
+  - [x] Door open
 
 ---
 

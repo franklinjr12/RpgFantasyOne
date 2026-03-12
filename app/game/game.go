@@ -74,6 +74,8 @@ type Game struct {
 	Results                  RunResults
 	RunPipeline              *RuntimePipeline
 	Settings                 settings.Settings
+	soundPlayer              func(string)
+	soundCooldowns           map[string]float32
 }
 
 type Projectile struct {
@@ -174,6 +176,8 @@ func NewGame(cfg settings.Settings) *Game {
 		Results:                  RunResults{},
 		RunPipeline:              NewRuntimePipeline(),
 		Settings:                 cfg,
+		soundPlayer:              nil,
+		soundCooldowns:           map[string]float32{},
 	}
 }
 
@@ -240,11 +244,13 @@ func (g *Game) updateBoot() {
 		)
 		manager.LoadFont(assets.FontDefault, "")
 		manager.LoadSound("sfx.ui.confirm", "resources/audio/ui_confirm.wav")
-		manager.LoadSound("sfx.skill.cast.melee", "resources/audio/skill_cast_melee.wav")
-		manager.LoadSound("sfx.skill.cast.ranged", "resources/audio/skill_cast_ranged.wav")
-		manager.LoadSound("sfx.skill.cast.caster", "resources/audio/skill_cast_caster.wav")
-		manager.LoadSound("sfx.skill.impact.physical", "resources/audio/skill_impact_physical.wav")
-		manager.LoadSound("sfx.skill.impact.magic", "resources/audio/skill_impact_magic.wav")
+		manager.LoadSound(sfxPlayerCast, "resources/sounds/player_cast.wav")
+		manager.LoadSound(sfxEnemyCast, "resources/sounds/enemy_cast.wav")
+		manager.LoadSound(sfxPlayerHit, "resources/sounds/player_damage_taken.wav")
+		manager.LoadSound(sfxEnemyHit, "resources/sounds/enemy_damage_taken.wav")
+		manager.LoadSound(sfxPlayerHealing, "resources/sounds/player_healing.mp3")
+		manager.LoadSound(sfxPlayerLevelUp, "resources/sounds/level_up.mp3")
+		manager.LoadSound(sfxDoorOpen, "resources/sounds/door_open.mp3")
 		manager.LoadMusic("music.menu", "resources/audio/menu.ogg")
 		g.BootCompleted = true
 	}
@@ -477,6 +483,7 @@ func (g *Game) ResetState() {
 	g.PendingRoomTransition = false
 	g.BossRewardTriggered = false
 	g.RunElapsed = 0
+	g.soundCooldowns = map[string]float32{}
 }
 
 func (g *Game) SpawnRoomEnemies() {
