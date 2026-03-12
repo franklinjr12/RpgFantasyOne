@@ -1,6 +1,8 @@
 package systems
 
 import (
+	"math/rand"
+
 	"singlefantasy/app/gamedata"
 	"singlefantasy/app/gameobjects"
 )
@@ -18,6 +20,7 @@ type CombatHitRequest struct {
 	UseSourceModifiers bool
 	SuppressFlash      bool
 	CritRoll           *float32
+	OnHitProcRoll      *float32
 }
 
 type CombatHitResult struct {
@@ -47,7 +50,7 @@ func ApplyCombatHit(request CombatHitRequest) CombatHitResult {
 
 	if request.ApplyOnHitHooks && request.Caster != nil && result.Damage.AppliedDamage > 0 {
 		damageType := resolveDamageType(request)
-		applyOnHitHooks(request.Caster, result.Damage.AppliedDamage, damageType)
+		applyOnHitHooks(request.Caster, request.Target, result.Damage.AppliedDamage, damageType, request.OnHitProcRoll)
 	}
 
 	result.TargetKilled = beforeAlive && !isTargetAlive(request.Target)
@@ -70,6 +73,8 @@ func ApplySkill(caster *gameobjects.Player, skill *gamedata.Skill, targets []int
 }
 
 func buildDamageRequest(request CombatHitRequest) (DamageRequest, bool) {
+	itemCritBonus := itemCritChanceBonus(request.Caster, request.Target)
+
 	if request.Skill != nil && request.Skill.DamageSpec != nil && request.Caster != nil {
 		baseDamage := ComputeDamage(request.Skill.DamageSpec, request.Caster.GetEffectiveStats())
 		return DamageRequest{
@@ -77,7 +82,7 @@ func buildDamageRequest(request CombatHitRequest) (DamageRequest, bool) {
 			Target:             request.Target,
 			BaseDamage:         baseDamage,
 			DamageType:         request.Skill.DamageSpec.DamageType,
-			CritChance:         request.CritChance + request.Caster.DerivedStats.CritChance + request.Skill.DamageSpec.CritChance,
+			CritChance:         request.CritChance + request.Caster.DerivedStats.CritChance + request.Skill.DamageSpec.CritChance + itemCritBonus,
 			CritMultiplier:     request.Skill.DamageSpec.CritMult,
 			UseSourceModifiers: request.UseSourceModifiers,
 			SuppressFlash:      request.SuppressFlash,
@@ -92,6 +97,7 @@ func buildDamageRequest(request CombatHitRequest) (DamageRequest, bool) {
 	totalCritChance := request.CritChance
 	if request.Caster != nil {
 		totalCritChance += request.Caster.DerivedStats.CritChance
+		totalCritChance += itemCritBonus
 	}
 	return DamageRequest{
 		Source:             request.Caster,
@@ -182,8 +188,8 @@ func targetMaxHP(target interface{}) int {
 	}
 }
 
-func applyOnHitHooks(caster *gameobjects.Player, appliedDamage int, damageType gamedata.DamageType) {
-	if caster == nil || appliedDamage <= 0 {
+func applyOnHitHooks(caster *gameobjects.Player, target interface{}, appliedDamage int, damageType gamedata.DamageType, procRoll *float32) {
+	if caster == nil || appliedDamage <= 0 || target == nil {
 		return
 	}
 
@@ -192,6 +198,83 @@ func applyOnHitHooks(caster *gameobjects.Player, appliedDamage int, damageType g
 	}
 	if gamedata.HasEffect(&caster.Effects, gamedata.EffectLifesteal) {
 		caster.Heal(int(float32(appliedDamage) * gamedata.GetEffectMagnitude(&caster.Effects, gamedata.EffectLifesteal)))
+	}
+
+	for _, effect := range caster.GetItemEffects() {
+		switch effect.Type {
+		case gamedata.ItemEffectLifestealOnHit:
+			caster.Heal(int(float32(appliedDamage) * effect.Magnitude))
+		case gamedata.ItemEffectManaOnHit:
+			if effect.Magnitude > 0 {
+				caster.GainMana(int(effect.Magnitude))
+			}
+		case gamedata.ItemEffectBurnOnHit:
+			if !shouldTriggerItemProc(effect.Chance, procRoll) {
+				continue
+			}
+
+			duration := effect.Duration
+			if duration <= 0 {
+				duration = 4
+			}
+			tickRate := effect.TickRate
+			if tickRate <= 0 {
+				tickRate = 1
+			}
+			applyEffectSpecToTarget(target, gamedata.EffectSpec{
+				Type:      gamedata.EffectBurn,
+				Duration:  duration,
+				Magnitude: effect.Magnitude,
+				TickRate:  tickRate,
+			})
+		}
+	}
+}
+
+func shouldTriggerItemProc(chance float32, roll *float32) bool {
+	if chance <= 0 {
+		chance = 1
+	}
+	if chance >= 1 {
+		return true
+	}
+	value := rand.Float32()
+	if roll != nil {
+		value = *roll
+	}
+	return value < clamp01(chance)
+}
+
+func itemCritChanceBonus(caster *gameobjects.Player, target interface{}) float32 {
+	if caster == nil || !targetHasSlowedState(target) {
+		return 0
+	}
+
+	bonus := float32(0)
+	for _, effect := range caster.GetItemEffects() {
+		if effect.Type == gamedata.ItemEffectCritChanceVsSlowed && effect.Magnitude > 0 {
+			bonus += effect.Magnitude
+		}
+	}
+	return bonus
+}
+
+func targetHasSlowedState(target interface{}) bool {
+	switch t := target.(type) {
+	case *gameobjects.Player:
+		return gamedata.HasEffect(&t.Effects, gamedata.EffectSlow) ||
+			gamedata.HasEffect(&t.Effects, gamedata.EffectFreeze) ||
+			gamedata.HasEffect(&t.Effects, gamedata.EffectMoveSpeedReduction)
+	case *gameobjects.Enemy:
+		return gamedata.HasEffect(&t.Effects, gamedata.EffectSlow) ||
+			gamedata.HasEffect(&t.Effects, gamedata.EffectFreeze) ||
+			gamedata.HasEffect(&t.Effects, gamedata.EffectMoveSpeedReduction)
+	case *gameobjects.Boss:
+		return gamedata.HasEffect(&t.Effects, gamedata.EffectSlow) ||
+			gamedata.HasEffect(&t.Effects, gamedata.EffectFreeze) ||
+			gamedata.HasEffect(&t.Effects, gamedata.EffectMoveSpeedReduction)
+	default:
+		return false
 	}
 }
 

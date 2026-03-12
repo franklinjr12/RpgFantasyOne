@@ -1,7 +1,6 @@
 package game
 
 import (
-	"math"
 	"sort"
 	"strings"
 
@@ -152,16 +151,6 @@ func (s *aiSystem) Update(ctx *RuntimeContext, dt float32) {
 	}
 
 	g.Boss.Update(dt, playerX, playerY)
-	if g.Boss.ShouldSpawnAdds() {
-		for i := 0; i < 2; i++ {
-			angle := float32(i) * 3.14159 * 2.0 / 2.0
-			addX := g.Boss.PosX + g.Boss.Hitbox.Width/2 + float32(math.Cos(float64(angle)))*100
-			addY := g.Boss.PosY + g.Boss.Hitbox.Height/2 + float32(math.Sin(float64(angle)))*100
-			add := gameobjects.NewEnemy(addX, addY, false)
-			g.Enemies = append(g.Enemies, add)
-		}
-		g.Boss.ResetAddSpawnTimer()
-	}
 }
 
 type castingSystem struct{}
@@ -784,12 +773,29 @@ func (s *combatResolveSystem) Update(ctx *RuntimeContext, _ float32) {
 		g.ApplyPlayerCombatHit(payload.Damage, payload.DamageType, payload.SourceX, payload.SourceY, payload.OnHitEffects)
 	}
 
-	if g.Boss != nil {
+	if g.Boss != nil && g.Boss.IsAlive() {
 		hit, damage, sourceX, sourceY := g.Boss.Attack(playerX, playerY)
 		if hit {
-			g.ApplyPlayerDirectHit(damage, sourceX, sourceY)
+			g.ApplyPlayerCombatHit(damage, gamedata.DamagePhysical, sourceX, sourceY, nil)
+		}
+
+		playerCenterX, playerCenterY := g.Player.Center()
+		for _, event := range g.Boss.ConsumeDamageEvents() {
+			if !isPlayerWithinBossEvent(playerCenterX, playerCenterY, g.Player.Hitbox.Width, event) {
+				continue
+			}
+			g.ApplyPlayerCombatHit(event.Damage, event.DamageType, event.X, event.Y, event.Effects)
 		}
 	}
+}
+
+func isPlayerWithinBossEvent(playerX, playerY, playerWidth float32, event gameobjects.BossDamageEvent) bool {
+	radius := event.Radius
+	if radius <= 0 {
+		return false
+	}
+	distance := systems.GetDistance(playerX, playerY, event.X, event.Y)
+	return distance <= radius+playerWidth/2
 }
 
 type effectsSystem struct{}
@@ -847,7 +853,11 @@ func (s *dungeonRunSystem) Update(ctx *RuntimeContext, dt float32) {
 
 		roomCleared := g.CheckRoomCompletion()
 		if g.CurrentRoom.IsBoss() && roomCleared {
-			g.EnterReward()
+			g.EnterBossReward()
+			return
+		}
+		if roomCleared && !g.CurrentRoom.IsBoss() && g.shouldTriggerMilestoneReward() {
+			g.EnterMilestoneReward()
 			return
 		}
 

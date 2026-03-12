@@ -43,4 +43,25 @@ func TestDataAccessClassSkillEnemy(t *testing.T) {
 	if modifier.Name == "" {
 		t.Fatalf("expected elite modifier name")
 	}
+
+	boss := GetBossEncounterData("forest")
+	if boss.ID == "" || boss.MaxHP <= 0 {
+		t.Fatalf("expected boss encounter data")
+	}
+
+	rewardPool := GetRewardPoolData("forest")
+	if len(rewardPool) < 30 {
+		t.Fatalf("expected reward pool for forest to contain at least 30 items, got %d", len(rewardPool))
+	}
+
+	rewardOptions := SelectRewardOptionsData(RewardSelectionRequest{
+		ClassType: ClassTypeMelee,
+		Biome:     "forest",
+		Context:   RewardContextBoss,
+		OfferSize: 3,
+		Seed:      99,
+	})
+	if len(rewardOptions) != 3 {
+		t.Fatalf("expected deterministic reward selector to return 3 options, got %d", len(rewardOptions))
+	}
 }

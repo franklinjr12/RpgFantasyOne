@@ -112,3 +112,29 @@ func TestDungeonGenerationIsDeterministic(t *testing.T) {
 		}
 	}
 }
+
+func TestDungeonBossRoomHasBossSpawnMarkerAndWestDoor(t *testing.T) {
+	dungeon := NewDungeon()
+	if dungeon == nil || len(dungeon.Rooms) == 0 {
+		t.Fatalf("expected dungeon rooms")
+	}
+
+	bossRoom := dungeon.Rooms[len(dungeon.Rooms)-1]
+	if bossRoom == nil || !bossRoom.IsBoss() {
+		t.Fatalf("expected final room to be boss")
+	}
+	if !bossRoom.HasBossSpawn {
+		t.Fatalf("expected boss room to expose boss spawn point")
+	}
+
+	hasWestDoor := false
+	for _, door := range bossRoom.Doors {
+		if door != nil && door.Direction == DoorDirectionWest {
+			hasWestDoor = true
+			break
+		}
+	}
+	if !hasWestDoor {
+		t.Fatalf("expected boss room to have at least one west entry door")
+	}
+}

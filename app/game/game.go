@@ -36,36 +36,41 @@ type RunResults struct {
 }
 
 type Game struct {
-	State                  AppState
-	Player                 *gameobjects.Player
-	Enemies                []*gameobjects.Enemy
-	Boss                   *gameobjects.Boss
-	Dungeon                *world.Dungeon
-	Camera                 *systems.Camera
-	Projectiles            []*Projectile
-	EnemyProjectiles       []*EnemyProjectile
-	DelayedSkillEffects    []*DelayedSkillEffect
-	SkillVisualEffects     []*SkillVisualEffect
-	CurrentRoom            *world.Room
-	SelectedClass          gamedata.ClassType
-	LevelUpMenu            bool
-	RewardOptions          []*gamedata.Item
-	SelectedReward         int
-	PlayerMoveTargetX      float32
-	PlayerMoveTargetY      float32
-	HasPlayerMoveTarget    bool
-	PlayerAttackTarget     interface{}
-	RoomTransitionTimer    float32
-	RoomTransitionDuration float32
-	PendingRoomTransition  bool
-	DebugOverlayEnabled    bool
-	BootCompleted          bool
-	LastFrameTime          float32
-	LastUpdateSteps        int
-	RunElapsed             float32
-	Results                RunResults
-	RunPipeline            *RuntimePipeline
-	Settings               settings.Settings
+	State                    AppState
+	Player                   *gameobjects.Player
+	Enemies                  []*gameobjects.Enemy
+	Boss                     *gameobjects.Boss
+	Dungeon                  *world.Dungeon
+	Camera                   *systems.Camera
+	Projectiles              []*Projectile
+	EnemyProjectiles         []*EnemyProjectile
+	DelayedSkillEffects      []*DelayedSkillEffect
+	SkillVisualEffects       []*SkillVisualEffect
+	CurrentRoom              *world.Room
+	SelectedClass            gamedata.ClassType
+	LevelUpMenu              bool
+	RewardOptions            []*gamedata.Item
+	SelectedReward           int
+	RewardContext            gamedata.RewardContext
+	RewardHistory            []gamedata.RewardOfferHistoryEntry
+	RewardSeed               int64
+	MilestoneRewardTriggered bool
+	PlayerMoveTargetX        float32
+	PlayerMoveTargetY        float32
+	HasPlayerMoveTarget      bool
+	PlayerAttackTarget       interface{}
+	RoomTransitionTimer      float32
+	RoomTransitionDuration   float32
+	PendingRoomTransition    bool
+	BossRewardTriggered      bool
+	DebugOverlayEnabled      bool
+	BootCompleted            bool
+	LastFrameTime            float32
+	LastUpdateSteps          int
+	RunElapsed               float32
+	Results                  RunResults
+	RunPipeline              *RuntimePipeline
+	Settings                 settings.Settings
 }
 
 type Projectile struct {
@@ -128,36 +133,41 @@ type SkillVisualEffect struct {
 
 func NewGame(cfg settings.Settings) *Game {
 	return &Game{
-		State:                  StateBoot,
-		Player:                 nil,
-		Enemies:                []*gameobjects.Enemy{},
-		Boss:                   nil,
-		Dungeon:                nil,
-		Camera:                 systems.NewCamera(),
-		Projectiles:            []*Projectile{},
-		EnemyProjectiles:       []*EnemyProjectile{},
-		DelayedSkillEffects:    []*DelayedSkillEffect{},
-		SkillVisualEffects:     []*SkillVisualEffect{},
-		CurrentRoom:            nil,
-		SelectedClass:          gamedata.ClassTypeMelee,
-		LevelUpMenu:            false,
-		RewardOptions:          []*gamedata.Item{},
-		SelectedReward:         0,
-		PlayerMoveTargetX:      0,
-		PlayerMoveTargetY:      0,
-		HasPlayerMoveTarget:    false,
-		PlayerAttackTarget:     nil,
-		RoomTransitionTimer:    0,
-		RoomTransitionDuration: 0.25,
-		PendingRoomTransition:  false,
-		DebugOverlayEnabled:    false,
-		BootCompleted:          false,
-		LastFrameTime:          0,
-		LastUpdateSteps:        0,
-		RunElapsed:             0,
-		Results:                RunResults{},
-		RunPipeline:            NewRuntimePipeline(),
-		Settings:               cfg,
+		State:                    StateBoot,
+		Player:                   nil,
+		Enemies:                  []*gameobjects.Enemy{},
+		Boss:                     nil,
+		Dungeon:                  nil,
+		Camera:                   systems.NewCamera(),
+		Projectiles:              []*Projectile{},
+		EnemyProjectiles:         []*EnemyProjectile{},
+		DelayedSkillEffects:      []*DelayedSkillEffect{},
+		SkillVisualEffects:       []*SkillVisualEffect{},
+		CurrentRoom:              nil,
+		SelectedClass:            gamedata.ClassTypeMelee,
+		LevelUpMenu:              false,
+		RewardOptions:            []*gamedata.Item{},
+		SelectedReward:           0,
+		RewardContext:            gamedata.RewardContextNone,
+		RewardHistory:            []gamedata.RewardOfferHistoryEntry{},
+		RewardSeed:               world.DefaultDungeonSeed,
+		MilestoneRewardTriggered: false,
+		PlayerMoveTargetX:        0,
+		PlayerMoveTargetY:        0,
+		HasPlayerMoveTarget:      false,
+		PlayerAttackTarget:       nil,
+		RoomTransitionTimer:      0,
+		RoomTransitionDuration:   0.25,
+		PendingRoomTransition:    false,
+		BossRewardTriggered:      false,
+		DebugOverlayEnabled:      false,
+		BootCompleted:            false,
+		LastFrameTime:            0,
+		LastUpdateSteps:          0,
+		RunElapsed:               0,
+		Results:                  RunResults{},
+		RunPipeline:              NewRuntimePipeline(),
+		Settings:                 cfg,
 	}
 }
 
@@ -275,6 +285,11 @@ func (g *Game) DebugLoadRoomTemplate(templateID string) error {
 	g.SkillVisualEffects = []*SkillVisualEffect{}
 	g.RoomTransitionTimer = 0
 	g.PendingRoomTransition = false
+	g.BossRewardTriggered = false
+	g.MilestoneRewardTriggered = false
+	g.RewardHistory = []gamedata.RewardOfferHistoryEntry{}
+	g.RewardContext = gamedata.RewardContextNone
+	g.RewardSeed = dungeon.Seed
 
 	g.SpawnRoomEnemies()
 	if g.CurrentRoom != nil && !g.CurrentRoom.IsBoss() {
@@ -304,18 +319,98 @@ func (g *Game) StartRun() {
 		g.CurrentRoom.SetDoorsLocked(true)
 	}
 	g.RunElapsed = 0
+	g.BossRewardTriggered = false
+	g.MilestoneRewardTriggered = false
+	g.RewardHistory = []gamedata.RewardOfferHistoryEntry{}
+	g.RewardContext = gamedata.RewardContextNone
+	if g.Dungeon != nil {
+		g.RewardSeed = g.Dungeon.Seed
+	} else {
+		g.RewardSeed = world.DefaultDungeonSeed
+	}
 	g.State = StateRun
 }
 
 func (g *Game) EnterReward() {
+	g.openReward(gamedata.RewardContextBoss)
+}
+
+func (g *Game) EnterBossReward() {
+	if g.BossRewardTriggered {
+		return
+	}
+	g.BossRewardTriggered = true
+	g.openReward(gamedata.RewardContextBoss)
+}
+
+func (g *Game) EnterMilestoneReward() {
+	if g.MilestoneRewardTriggered {
+		return
+	}
+	g.MilestoneRewardTriggered = true
+	g.openReward(gamedata.RewardContextMilestone)
+}
+
+func (g *Game) openReward(context gamedata.RewardContext) {
 	if g.Player == nil {
 		g.EnterResults(false, "")
 		return
 	}
 
-	g.RewardOptions = gamedata.GetRewardData(g.Player.Class.Type)
+	offerSize := RewardBossOfferSize
+	if context == gamedata.RewardContextMilestone {
+		offerSize = RewardMilestoneOfferSize
+	}
+
+	request := gamedata.RewardSelectionRequest{
+		ClassType: g.Player.Class.Type,
+		Biome:     g.rewardBiome(),
+		Context:   context,
+		OfferSize: offerSize,
+		Seed:      g.RewardSeed + int64(len(g.RewardHistory)*31),
+		History:   append([]gamedata.RewardOfferHistoryEntry{}, g.RewardHistory...),
+	}
+
+	g.RewardOptions = gamedata.SelectRewardOptionsData(request)
+	if len(g.RewardOptions) == 0 {
+		g.RewardOptions = gamedata.SelectRewardOptionsData(gamedata.RewardSelectionRequest{
+			ClassType: g.Player.Class.Type,
+			Biome:     "forest",
+			Context:   context,
+			OfferSize: offerSize,
+			Seed:      g.RewardSeed + 777,
+		})
+	}
+	if len(g.RewardOptions) == 0 {
+		g.EnterResults(false, "")
+		return
+	}
+
+	g.RewardContext = context
 	g.SelectedReward = 0
 	g.State = StateReward
+}
+
+func (g *Game) rewardBiome() string {
+	if g.CurrentRoom != nil && strings.TrimSpace(g.CurrentRoom.Biome) != "" {
+		return g.CurrentRoom.Biome
+	}
+	if g.Dungeon != nil {
+		for _, room := range g.Dungeon.Rooms {
+			if room == nil || strings.TrimSpace(room.Biome) == "" {
+				continue
+			}
+			return room.Biome
+		}
+	}
+	return "forest"
+}
+
+func (g *Game) shouldTriggerMilestoneReward() bool {
+	if g == nil || g.MilestoneRewardTriggered || g.Dungeon == nil {
+		return false
+	}
+	return g.Dungeon.CurrentRoom+1 == RewardMilestoneRoomIndex
 }
 
 func (g *Game) EnterResults(victory bool, rewardPicked string) {
@@ -338,6 +433,9 @@ func (g *Game) EnterResults(victory bool, rewardPicked string) {
 		SelectedClass:      g.SelectedClass,
 		RewardPicked:       rewardPicked,
 	}
+	g.RewardOptions = []*gamedata.Item{}
+	g.SelectedReward = 0
+	g.RewardContext = gamedata.RewardContextNone
 	g.State = StateResults
 }
 
@@ -355,12 +453,17 @@ func (g *Game) ResetState() {
 	g.LevelUpMenu = false
 	g.RewardOptions = []*gamedata.Item{}
 	g.SelectedReward = 0
+	g.RewardContext = gamedata.RewardContextNone
+	g.RewardHistory = []gamedata.RewardOfferHistoryEntry{}
+	g.RewardSeed = world.DefaultDungeonSeed
+	g.MilestoneRewardTriggered = false
 	g.PlayerMoveTargetX = 0
 	g.PlayerMoveTargetY = 0
 	g.HasPlayerMoveTarget = false
 	g.PlayerAttackTarget = nil
 	g.RoomTransitionTimer = 0
 	g.PendingRoomTransition = false
+	g.BossRewardTriggered = false
 	g.RunElapsed = 0
 }
 
@@ -374,7 +477,7 @@ func (g *Game) SpawnRoomEnemies() {
 
 	if g.CurrentRoom.IsBoss() {
 		bossX, bossY := g.CurrentRoom.SpawnPoint()
-		g.Boss = gameobjects.NewBoss(bossX, bossY)
+		g.Boss = gameobjects.NewBoss(bossX, bossY, g.CurrentRoom.Biome)
 	} else {
 		for _, enemyRef := range g.CurrentRoom.Enemies {
 			enemy := gameobjects.NewEnemyFromArchetype(enemyRef.X, enemyRef.Y, enemyRef.Type, enemyRef.IsElite, enemyRef.EliteModifier)
@@ -463,6 +566,7 @@ func (g *Game) AdvanceToNextRoom() {
 	g.SkillVisualEffects = []*SkillVisualEffect{}
 	g.RoomTransitionTimer = 0
 	g.PendingRoomTransition = false
+	g.BossRewardTriggered = false
 }
 
 func (g *Game) IsMenuOpen() bool {
@@ -494,14 +598,22 @@ func (g *Game) updateReward() {
 	if rl.IsKeyPressed(rl.KeyOne) {
 		g.SelectedReward = 0
 	}
-	if rl.IsKeyPressed(rl.KeyTwo) {
+	if len(g.RewardOptions) > 1 && rl.IsKeyPressed(rl.KeyTwo) {
 		g.SelectedReward = 1
 	}
-	if rl.IsKeyPressed(rl.KeyThree) {
+	if len(g.RewardOptions) > 2 && rl.IsKeyPressed(rl.KeyThree) {
 		g.SelectedReward = 2
 	}
 
 	if !rl.IsKeyPressed(rl.KeyEnter) {
+		return
+	}
+
+	g.confirmRewardSelection()
+}
+
+func (g *Game) confirmRewardSelection() {
+	if g == nil {
 		return
 	}
 
@@ -513,6 +625,17 @@ func (g *Game) updateReward() {
 			rewardPicked = item.Name
 		}
 	}
+
+	g.RewardHistory = append(g.RewardHistory, gamedata.BuildRewardHistoryEntry(g.RewardContext, g.RewardOptions))
+
+	if g.RewardContext == gamedata.RewardContextMilestone {
+		g.RewardOptions = []*gamedata.Item{}
+		g.SelectedReward = 0
+		g.RewardContext = gamedata.RewardContextNone
+		g.State = StateRun
+		return
+	}
+
 	g.EnterResults(true, rewardPicked)
 }
 
@@ -762,53 +885,121 @@ func (g *Game) drawRun() {
 }
 
 func (g *Game) drawRewardSelection() {
-	rl.DrawRectangle(WindowWidth/2-300, WindowHeight/2-200, 600, 400, rl.NewColor(0, 0, 0, 220))
-	rl.DrawText("Select a Reward", WindowWidth/2-100, WindowHeight/2-180, 30, rl.White)
+	rl.DrawRectangle(WindowWidth/2-360, WindowHeight/2-240, 720, 500, rl.NewColor(0, 0, 0, 220))
+	title := "Select Boss Reward"
+	if g.RewardContext == gamedata.RewardContextMilestone {
+		title = "Select Milestone Reward"
+	}
+	rl.DrawText(title, WindowWidth/2-170, WindowHeight/2-220, 30, rl.White)
 
 	for i, item := range g.RewardOptions {
 		if item == nil {
 			continue
 		}
 
-		y := WindowHeight/2 - 120 + int32(i*100)
+		y := WindowHeight/2 - 165 + int32(i*130)
 		color := rl.White
 		if g.SelectedReward == i {
 			color = rl.Yellow
-			rl.DrawRectangle(WindowWidth/2-290, y-5, 580, 90, rl.NewColor(255, 255, 0, 50))
+			rl.DrawRectangle(WindowWidth/2-350, y-8, 700, 120, rl.NewColor(255, 255, 0, 45))
 		}
 
-		g.drawRewardItemIcon(item, float32(WindowWidth/2-278), float32(y+4), g.SelectedReward == i)
-		rl.DrawText(fmt.Sprintf("%d: %s", i+1, item.Name), WindowWidth/2-228, y, 24, color)
-		rl.DrawText(item.Description, WindowWidth/2-228, y+30, 18, rl.Gray)
+		g.drawRewardItemIcon(item, float32(WindowWidth/2-338), float32(y+4), g.SelectedReward == i)
+		rl.DrawText(fmt.Sprintf("%d: [%s] %s", i+1, item.Slot.String(), item.Name), WindowWidth/2-284, y, 22, color)
+		rl.DrawText(item.Description, WindowWidth/2-284, y+24, 18, rl.Gray)
 
-		bonusText := "Bonuses: "
-		first := true
-		for statType, bonus := range item.StatBonuses {
-			if !first {
-				bonusText += ", "
+		statLine := formatItemBonusLine(item.StatBonuses)
+		rl.DrawText(statLine, WindowWidth/2-284, y+48, 17, rl.LightGray)
+
+		if len(item.Effects) > 0 {
+			effectText := gamedata.DescribeItemEffect(item.Effects[0])
+			if effectText != "" {
+				rl.DrawText("Effect: "+effectText, WindowWidth/2-284, y+70, 16, rl.NewColor(180, 210, 255, 255))
 			}
-			statName := ""
-			switch statType {
-			case gamedata.StatTypeSTR:
-				statName = "STR"
-			case gamedata.StatTypeAGI:
-				statName = "AGI"
-			case gamedata.StatTypeVIT:
-				statName = "VIT"
-			case gamedata.StatTypeINT:
-				statName = "INT"
-			case gamedata.StatTypeDEX:
-				statName = "DEX"
-			case gamedata.StatTypeLUK:
-				statName = "LUK"
-			}
-			bonusText += fmt.Sprintf("%s +%d", statName, bonus)
-			first = false
 		}
-		rl.DrawText(bonusText, WindowWidth/2-228, y+55, 16, rl.LightGray)
+
+		var equipped *gamedata.Item
+		if g.Player != nil {
+			equipped = g.Player.Equipment[item.Slot]
+		}
+		equippedName := "None"
+		if equipped != nil {
+			equippedName = equipped.Name
+		}
+		rl.DrawText("Equipped: "+equippedName, WindowWidth/2+80, y+4, 16, rl.NewColor(200, 200, 200, 255))
+
+		deltas := rewardDeltaLines(item, equipped)
+		for deltaIndex, deltaLine := range deltas {
+			if deltaIndex >= 3 {
+				break
+			}
+			deltaColor := rl.NewColor(140, 220, 140, 255)
+			if strings.Contains(deltaLine, "-") {
+				deltaColor = rl.NewColor(235, 125, 125, 255)
+			}
+			rl.DrawText(deltaLine, WindowWidth/2+80, y+26+int32(deltaIndex*18), 16, deltaColor)
+		}
 	}
 
-	rl.DrawText("Press ENTER to confirm, 1-3 to choose", WindowWidth/2-190, WindowHeight/2+180, 18, rl.White)
+	maxOption := len(g.RewardOptions)
+	rl.DrawText(fmt.Sprintf("Press ENTER to confirm, 1-%d to choose", maxOption), WindowWidth/2-190, WindowHeight/2+226, 18, rl.White)
+}
+
+func formatItemBonusLine(bonuses map[gamedata.StatType]int) string {
+	if len(bonuses) == 0 {
+		return "Bonuses: none"
+	}
+	orderedStats := []gamedata.StatType{
+		gamedata.StatTypeSTR,
+		gamedata.StatTypeAGI,
+		gamedata.StatTypeVIT,
+		gamedata.StatTypeINT,
+		gamedata.StatTypeDEX,
+		gamedata.StatTypeLUK,
+	}
+	parts := make([]string, 0, len(orderedStats))
+	for _, statType := range orderedStats {
+		value, exists := bonuses[statType]
+		if !exists || value == 0 {
+			continue
+		}
+		parts = append(parts, fmt.Sprintf("%s %+d", statType.String(), value))
+	}
+	if len(parts) == 0 {
+		return "Bonuses: none"
+	}
+	return "Bonuses: " + strings.Join(parts, ", ")
+}
+
+func rewardDeltaLines(offered, equipped *gamedata.Item) []string {
+	orderedStats := []gamedata.StatType{
+		gamedata.StatTypeSTR,
+		gamedata.StatTypeAGI,
+		gamedata.StatTypeVIT,
+		gamedata.StatTypeINT,
+		gamedata.StatTypeDEX,
+		gamedata.StatTypeLUK,
+	}
+	lines := make([]string, 0, len(orderedStats))
+	for _, statType := range orderedStats {
+		offeredValue := 0
+		equippedValue := 0
+		if offered != nil {
+			offeredValue = offered.StatBonuses[statType]
+		}
+		if equipped != nil {
+			equippedValue = equipped.StatBonuses[statType]
+		}
+		delta := offeredValue - equippedValue
+		if delta == 0 {
+			continue
+		}
+		lines = append(lines, fmt.Sprintf("%s %+d", statType.String(), delta))
+	}
+	if len(lines) == 0 {
+		return []string{"No stat change"}
+	}
+	return lines
 }
 
 func (g *Game) drawResults() {
@@ -940,6 +1131,11 @@ func (g *Game) GetDebugLines() []string {
 		}
 
 		lines = append(lines, fmt.Sprintf("Projectiles (player/enemy/boss): %d/%d/%d", activeProjectiles, enemyProjectiles, bossProjectiles))
+		if g.Boss != nil && g.Boss.IsAlive() {
+			lines = append(lines, fmt.Sprintf("Boss phase: %s", g.Boss.Phase.String()))
+			lines = append(lines, fmt.Sprintf("Boss heavy: %s (%.2fs)", g.Boss.HeavyState.String(), g.Boss.HeavyTimeRemaining()))
+			lines = append(lines, fmt.Sprintf("Boss zones active: %d", g.Boss.ActiveZoneCount()))
+		}
 		activeDelayed := 0
 		for _, delayed := range g.DelayedSkillEffects {
 			if delayed != nil && delayed.Alive {

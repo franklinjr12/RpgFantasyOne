@@ -6,6 +6,7 @@ const (
 	ClassTypeMelee ClassType = iota
 	ClassTypeRanged
 	ClassTypeCaster
+	ClassTypeAny
 )
 
 type StatType int

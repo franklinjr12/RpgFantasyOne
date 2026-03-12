@@ -12,6 +12,12 @@ const (
 )
 
 const (
+	RewardBossOfferSize      = 3
+	RewardMilestoneOfferSize = 2
+	RewardMilestoneRoomIndex = 4
+)
+
+const (
 	WindowWidth  = 1600
 	WindowHeight = 900
 )

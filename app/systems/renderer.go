@@ -479,6 +479,39 @@ func DrawBoss(boss *gameobjects.Boss, camera *Camera) {
 		return
 	}
 
+	for _, zone := range boss.ActiveAreaZones() {
+		screenX, screenY := WorldToScreenIso(zone.X, zone.Y, camera)
+		if zone.Active {
+			fill := rl.NewColor(208, 54, 54, 88)
+			outline := rl.NewColor(255, 96, 96, 230)
+			rl.DrawCircle(int32(screenX), int32(screenY), zone.Radius, fill)
+			rl.DrawCircleLines(int32(screenX), int32(screenY), zone.Radius, outline)
+			continue
+		}
+
+		warningRatio := float32(1)
+		if zone.WarningDuration > 0 {
+			warningRatio = zone.WarningTimeLeft / zone.WarningDuration
+		}
+		if warningRatio < 0 {
+			warningRatio = 0
+		}
+		if warningRatio > 1 {
+			warningRatio = 1
+		}
+		alpha := uint8(40 + (1-warningRatio)*90)
+		fill := rl.NewColor(255, 192, 84, alpha)
+		outline := rl.NewColor(255, 226, 148, 220)
+		rl.DrawCircle(int32(screenX), int32(screenY), zone.Radius, fill)
+		rl.DrawCircleLines(int32(screenX), int32(screenY), zone.Radius, outline)
+	}
+
+	if telegraph, ok := boss.ActiveHeavyTelegraph(); ok {
+		screenX, screenY := WorldToScreenIso(telegraph.X, telegraph.Y, camera)
+		rl.DrawCircleLines(int32(screenX), int32(screenY), telegraph.Radius, rl.NewColor(255, 88, 88, 255))
+		rl.DrawCircleLines(int32(screenX), int32(screenY), telegraph.Radius+3, rl.NewColor(255, 166, 120, 220))
+	}
+
 	screenX, screenY := actorScreenRect(boss.PosX, boss.PosY, boss.Hitbox.Width, boss.Hitbox.Height, camera)
 
 	sourceRect := getSpriteSourceRect(2, 4)
@@ -489,12 +522,6 @@ func DrawBoss(boss *gameobjects.Boss, camera *Camera) {
 		tint = rl.Orange
 	} else if boss.AttackFlashTimer > 0 {
 		tint = rl.Yellow
-	}
-
-	if boss.TelegraphTimer > 0 {
-		centerX, centerY := boss.Center()
-		tx, ty := WorldToScreenIso(centerX, centerY, camera)
-		rl.DrawCircleLines(int32(tx), int32(ty), 70, rl.Red)
 	}
 
 	drawTextureOrRect(GetSpriteSheet(), sourceRect, destRect, tint, rl.Purple)

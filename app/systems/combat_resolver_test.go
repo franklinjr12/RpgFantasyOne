@@ -137,3 +137,73 @@ func TestApplyCombatHitPoisonTipPercentMaxHPTickUsesCaps(t *testing.T) {
 		t.Fatalf("expected poison magnitude to clamp at max tick %d, got %.2f", poisonSpec.MaxTickDamage, magnitude)
 	}
 }
+
+func TestApplyCombatHitItemCritVsSlowedAffectsCritRoll(t *testing.T) {
+	caster := gameobjects.NewPlayer(0, 0, gamedata.ClassTypeMelee)
+	enemy := gameobjects.NewEnemy(0, 0, false)
+	critItem := gamedata.NewCuratedItem(
+		"test_crit_vs_slow",
+		"Test Crit",
+		"",
+		gamedata.ItemSlotHead,
+		map[gamedata.StatType]int{},
+		gamedata.ClassTypeMelee,
+		gamedata.ItemMetadata{Effects: []gamedata.ItemEffect{{Type: gamedata.ItemEffectCritChanceVsSlowed, Magnitude: 1}}},
+	)
+	caster.EquipItem(critItem)
+	gamedata.ApplyEffect(&enemy.Effects, gamedata.Effect{Type: gamedata.EffectSlow, Duration: 2, Magnitude: 0.3})
+
+	roll := float32(0.5)
+	result := ApplyCombatHit(CombatHitRequest{
+		Caster:             caster,
+		Target:             enemy,
+		BaseDamage:         10,
+		DamageType:         gamedata.DamagePhysical,
+		CritChance:         0,
+		CritMultiplier:     2,
+		ApplyOnHitHooks:    true,
+		UseSourceModifiers: false,
+		CritRoll:           &roll,
+	})
+
+	if !result.Damage.IsCrit {
+		t.Fatalf("expected crit from item bonus against slowed target")
+	}
+}
+
+func TestApplyCombatHitItemBurnOnHitAppliesBurnEffect(t *testing.T) {
+	caster := gameobjects.NewPlayer(0, 0, gamedata.ClassTypeRanged)
+	enemy := gameobjects.NewEnemy(0, 0, false)
+	burnItem := gamedata.NewCuratedItem(
+		"test_burn",
+		"Test Burn",
+		"",
+		gamedata.ItemSlotWeapon,
+		map[gamedata.StatType]int{},
+		gamedata.ClassTypeRanged,
+		gamedata.ItemMetadata{Effects: []gamedata.ItemEffect{{Type: gamedata.ItemEffectBurnOnHit, Magnitude: 5, Chance: 0.5, Duration: 4, TickRate: 1}}},
+	)
+	caster.EquipItem(burnItem)
+
+	critRoll := float32(1)
+	procRoll := float32(0.2)
+	ApplyCombatHit(CombatHitRequest{
+		Caster:             caster,
+		Target:             enemy,
+		BaseDamage:         8,
+		DamageType:         gamedata.DamagePhysical,
+		CritChance:         0,
+		CritMultiplier:     1.5,
+		ApplyOnHitHooks:    true,
+		UseSourceModifiers: false,
+		CritRoll:           &critRoll,
+		OnHitProcRoll:      &procRoll,
+	})
+
+	if !gamedata.HasEffect(&enemy.Effects, gamedata.EffectBurn) {
+		t.Fatalf("expected burn effect to be applied from item proc")
+	}
+	if magnitude := gamedata.GetEffectMagnitude(&enemy.Effects, gamedata.EffectBurn); magnitude != 5 {
+		t.Fatalf("expected burn magnitude 5, got %.2f", magnitude)
+	}
+}

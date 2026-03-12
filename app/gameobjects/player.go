@@ -346,6 +346,36 @@ func (p *Player) GetEffectiveStats() *gamedata.Stats {
 	return &p.EffectiveStats
 }
 
+func (p *Player) GetEquippedItems() []*gamedata.Item {
+	if p == nil || len(p.Equipment) == 0 {
+		return nil
+	}
+
+	items := make([]*gamedata.Item, 0, len(p.Equipment))
+	for _, item := range p.Equipment {
+		if item == nil {
+			continue
+		}
+		items = append(items, item)
+	}
+	return items
+}
+
+func (p *Player) GetItemEffects() []gamedata.ItemEffect {
+	if p == nil {
+		return nil
+	}
+
+	effects := make([]gamedata.ItemEffect, 0, len(p.Equipment))
+	for _, item := range p.Equipment {
+		if item == nil || len(item.Effects) == 0 {
+			continue
+		}
+		effects = append(effects, item.Effects...)
+	}
+	return effects
+}
+
 func applyResistance(damage int, resistance float32) int {
 	if damage <= 0 {
 		return 0

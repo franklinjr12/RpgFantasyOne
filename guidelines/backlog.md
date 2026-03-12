@@ -129,29 +129,29 @@
 ---
 
 ## 10) Boss Encounter (Real Validation Fight)
-- [ ] Boss entity + arena layout
-- [ ] Boss AI with at least:
-  - [ ] Telegraphed heavy attack
-  - [ ] Area denial mechanic (AoE zones)
-  - [ ] Add spawn phase OR enrage phase (at 50% HP)
-- [ ] Boss-specific tuning for solo play (fair, readable, class-agnostic)
-- [ ] Boss reward trigger (curated selection)
+- [x] Boss entity + arena layout
+- [x] Boss AI with at least:
+  - [x] Telegraphed heavy attack
+  - [x] Area denial mechanic (AoE zones)
+  - [x] Add spawn phase OR enrage phase (at 50% HP)
+- [x] Boss-specific tuning for solo play (fair, readable, class-agnostic)
+- [x] Boss reward trigger (curated selection)
 
 ---
 
 ## 11) Deterministic Rewards & Items (Curated Progression)
 > No low-chance drops; reward choices feel good and enable builds.
 
-- [ ] Equipment system with 4 slots: Weapon, Head, Chest, Lower
-- [ ] Item model: stat modifiers + occasional special effect (proc/passive)
-- [ ] Curated reward pool for Biome 1:
-  - [ ] At least **30 items** total (10 per class flavor, overlap allowed)
-  - [ ] Mix of minor upgrades and build-enablers (e.g., “burn on hit”, “+crit on slowed targets”)
-- [ ] Reward presentation:
-  - [ ] Choose 1 of 3 after boss
-  - [ ] Optional smaller reward after mid-run milestone (e.g., room 4)
-- [ ] Ensure deterministic feel: weighted selection + anti-repeat (avoid showing identical choice sets)
-- [ ] Item compare UI (show equipped vs offered deltas)
+- [x] Equipment system with 4 slots: Weapon, Head, Chest, Lower
+- [x] Item model: stat modifiers + occasional special effect (proc/passive)
+- [x] Curated reward pool for Biome 1:
+  - [x] At least **30 items** total (10 per class flavor, overlap allowed)
+  - [x] Mix of minor upgrades and build-enablers (e.g., “burn on hit”, “+crit on slowed targets”)
+- [x] Reward presentation:
+  - [x] Choose 1 of 3 after boss
+  - [x] Optional smaller reward after mid-run milestone (e.g., room 4)
+- [x] Ensure deterministic feel: weighted selection + anti-repeat (avoid showing identical choice sets)
+- [x] Item compare UI (show equipped vs offered deltas)
 
 ---
 

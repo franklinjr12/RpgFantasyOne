@@ -119,3 +119,71 @@ func TestLoadRoomTemplatePairValidation(t *testing.T) {
 		t.Fatalf("expected door mismatch validation error")
 	}
 }
+
+func TestLoadRoomTemplatePairBossValidation(t *testing.T) {
+	tempDir := t.TempDir()
+	layoutPath := filepath.Join(tempDir, "boss_room.layout")
+	metaPath := filepath.Join(tempDir, "boss_room.meta.json")
+
+	validLayout := strings.Join([]string{
+		"########",
+		"#......#",
+		"#......#",
+		"D......#",
+		"#......#",
+		"#...B..#",
+		"#......#",
+		"########",
+	}, "\n")
+	validMeta := `{
+  "id":"boss_room",
+  "biome":"forest",
+  "type":"boss",
+  "difficulty":3,
+  "doors":[{"x":0,"y":3,"dir":"west"}]
+}`
+
+	if err := os.WriteFile(layoutPath, []byte(validLayout), 0o644); err != nil {
+		t.Fatalf("write layout: %v", err)
+	}
+	if err := os.WriteFile(metaPath, []byte(validMeta), 0o644); err != nil {
+		t.Fatalf("write metadata: %v", err)
+	}
+	if _, err := loadRoomTemplatePair(layoutPath, metaPath); err != nil {
+		t.Fatalf("expected valid boss template, got error: %v", err)
+	}
+
+	invalidLayout := strings.Join([]string{
+		"########",
+		"#......#",
+		"#..B...#",
+		"D......#",
+		"#......#",
+		"#..B...#",
+		"#......#",
+		"########",
+	}, "\n")
+	if err := os.WriteFile(layoutPath, []byte(invalidLayout), 0o644); err != nil {
+		t.Fatalf("write invalid layout: %v", err)
+	}
+	if _, err := loadRoomTemplatePair(layoutPath, metaPath); err == nil {
+		t.Fatalf("expected boss validation failure for duplicate boss markers")
+	}
+
+	noWestMeta := `{
+  "id":"boss_room",
+  "biome":"forest",
+  "type":"boss",
+  "difficulty":3,
+  "doors":[{"x":0,"y":3,"dir":"east"}]
+}`
+	if err := os.WriteFile(layoutPath, []byte(validLayout), 0o644); err != nil {
+		t.Fatalf("write layout: %v", err)
+	}
+	if err := os.WriteFile(metaPath, []byte(noWestMeta), 0o644); err != nil {
+		t.Fatalf("write metadata: %v", err)
+	}
+	if _, err := loadRoomTemplatePair(layoutPath, metaPath); err == nil {
+		t.Fatalf("expected boss validation failure for missing west entry")
+	}
+}

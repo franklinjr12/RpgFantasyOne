@@ -57,5 +57,17 @@ func GetArmorData(slot ItemSlot) []*Item {
 }
 
 func GetRewardData(classType ClassType) []*Item {
-	return GenerateRewardOptions(classType)
+	return rewardPoolForRequest(classType, "forest")
+}
+
+func GetRewardPoolData(biome string) []*Item {
+	return GetBiomeItemPool(biome)
+}
+
+func SelectRewardOptionsData(request RewardSelectionRequest) []*Item {
+	return SelectRewardOptions(request)
+}
+
+func GetBossEncounterData(biome string) BossEncounterConfig {
+	return GetBossEncounterConfig(biome)
 }

@@ -230,5 +230,104 @@ func loadRoomTemplatePair(layoutPath, metaPath string) (*RoomTemplate, error) {
 		AllowRotation: meta.AllowRotation,
 	}
 
+	if err := validateTemplateForRoomType(template); err != nil {
+		return nil, err
+	}
+
 	return template, nil
+}
+
+func validateTemplateForRoomType(template *RoomTemplate) error {
+	if template == nil {
+		return fmt.Errorf("room template is nil")
+	}
+	if template.Type == RoomTypeBoss {
+		return validateBossTemplate(template)
+	}
+	return nil
+}
+
+func validateBossTemplate(template *RoomTemplate) error {
+	westDoors := make([]DoorMarker, 0, len(template.Doors))
+	for _, door := range template.Doors {
+		if door.Direction != DoorDirectionWest {
+			continue
+		}
+		westDoors = append(westDoors, door)
+
+		interiorX := door.X + 1
+		interiorY := door.Y
+		if !isTemplateCoordinateInBounds(template, interiorX, interiorY) {
+			return fmt.Errorf("boss template %q west door (%d,%d) has out-of-bounds interior tile", template.ID, door.X, door.Y)
+		}
+		if !isTemplateWalkableTile(template.Tiles[interiorY][interiorX]) {
+			return fmt.Errorf("boss template %q west door (%d,%d) has blocked interior tile", template.ID, door.X, door.Y)
+		}
+	}
+	if len(westDoors) == 0 {
+		return fmt.Errorf("boss template %q requires at least one west door", template.ID)
+	}
+
+	bossMarkers := make([]SpawnMarker, 0, 1)
+	for _, marker := range template.SpawnMarkers {
+		if marker.Type == SpawnTypeBoss {
+			bossMarkers = append(bossMarkers, marker)
+		}
+	}
+	if len(bossMarkers) != 1 {
+		return fmt.Errorf("boss template %q must contain exactly one boss spawn marker, got %d", template.ID, len(bossMarkers))
+	}
+
+	bossMarker := bossMarkers[0]
+	if !hasTemplateWalkableNeighbor(template, bossMarker.X, bossMarker.Y) {
+		return fmt.Errorf("boss template %q boss spawn marker at (%d,%d) is blocked", template.ID, bossMarker.X, bossMarker.Y)
+	}
+
+	minDistanceToDoor := -1
+	for _, door := range westDoors {
+		distance := absInt(bossMarker.X-door.X) + absInt(bossMarker.Y-door.Y)
+		if minDistanceToDoor == -1 || distance < minDistanceToDoor {
+			minDistanceToDoor = distance
+		}
+	}
+	if minDistanceToDoor >= 0 && minDistanceToDoor < 3 {
+		return fmt.Errorf("boss template %q boss spawn marker too close to west entry", template.ID)
+	}
+
+	return nil
+}
+
+func isTemplateCoordinateInBounds(template *RoomTemplate, x, y int) bool {
+	return template != nil && y >= 0 && y < len(template.Tiles) && x >= 0 && x < len(template.Tiles[y])
+}
+
+func isTemplateWalkableTile(tile TileType) bool {
+	return tile == TileFloor || tile == TileDoor
+}
+
+func hasTemplateWalkableNeighbor(template *RoomTemplate, x, y int) bool {
+	neighbors := [][2]int{
+		{x + 1, y},
+		{x - 1, y},
+		{x, y + 1},
+		{x, y - 1},
+	}
+	for _, neighbor := range neighbors {
+		nx := neighbor[0]
+		ny := neighbor[1]
+		if !isTemplateCoordinateInBounds(template, nx, ny) {
+			continue
+		}
+		if isTemplateWalkableTile(template.Tiles[ny][nx]) {
+			return true
+		}
+	}
+	return false
+}
+
+func absInt(value int) int {
+	if value < 0 {
+		return -value
+	}
+	return value
 }

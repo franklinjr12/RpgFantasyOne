@@ -18,6 +18,7 @@ const (
 )
 
 type Dungeon struct {
+	Seed        int64
 	Rooms       []*Room
 	CurrentRoom int
 }
@@ -149,6 +150,7 @@ func NewDungeonWithConfig(cfg DungeonGenerationConfig) (*Dungeon, error) {
 	}
 
 	return &Dungeon{
+		Seed:        cfg.Seed,
 		Rooms:       rooms,
 		CurrentRoom: 0,
 	}, nil
@@ -177,6 +179,7 @@ func NewDebugDungeonFromTemplate(templateID string, cfg DungeonGenerationConfig)
 		return nil, fmt.Errorf("failed to instantiate template %q", templateID)
 	}
 	return &Dungeon{
+		Seed:        cfg.Seed,
 		Rooms:       []*Room{room},
 		CurrentRoom: 0,
 	}, nil
