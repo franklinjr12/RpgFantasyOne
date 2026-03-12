@@ -46,6 +46,9 @@ type Game struct {
 	EnemyProjectiles         []*EnemyProjectile
 	DelayedSkillEffects      []*DelayedSkillEffect
 	SkillVisualEffects       []*SkillVisualEffect
+	CombatTextEvents         []*CombatTextEvent
+	DirectionalTelegraphs    []*DirectionalTelegraphEvent
+	CombatFeedbackSequence   int
 	CurrentRoom              *world.Room
 	SelectedClass            gamedata.ClassType
 	LevelUpMenu              bool
@@ -143,6 +146,9 @@ func NewGame(cfg settings.Settings) *Game {
 		EnemyProjectiles:         []*EnemyProjectile{},
 		DelayedSkillEffects:      []*DelayedSkillEffect{},
 		SkillVisualEffects:       []*SkillVisualEffect{},
+		CombatTextEvents:         []*CombatTextEvent{},
+		DirectionalTelegraphs:    []*DirectionalTelegraphEvent{},
+		CombatFeedbackSequence:   0,
 		CurrentRoom:              nil,
 		SelectedClass:            gamedata.ClassTypeMelee,
 		LevelUpMenu:              false,
@@ -283,6 +289,9 @@ func (g *Game) DebugLoadRoomTemplate(templateID string) error {
 	g.EnemyProjectiles = []*EnemyProjectile{}
 	g.DelayedSkillEffects = []*DelayedSkillEffect{}
 	g.SkillVisualEffects = []*SkillVisualEffect{}
+	g.CombatTextEvents = []*CombatTextEvent{}
+	g.DirectionalTelegraphs = []*DirectionalTelegraphEvent{}
+	g.CombatFeedbackSequence = 0
 	g.RoomTransitionTimer = 0
 	g.PendingRoomTransition = false
 	g.BossRewardTriggered = false
@@ -448,6 +457,9 @@ func (g *Game) ResetState() {
 	g.EnemyProjectiles = []*EnemyProjectile{}
 	g.DelayedSkillEffects = []*DelayedSkillEffect{}
 	g.SkillVisualEffects = []*SkillVisualEffect{}
+	g.CombatTextEvents = []*CombatTextEvent{}
+	g.DirectionalTelegraphs = []*DirectionalTelegraphEvent{}
+	g.CombatFeedbackSequence = 0
 	g.CurrentRoom = nil
 	g.Camera = systems.NewCamera()
 	g.LevelUpMenu = false
@@ -564,6 +576,9 @@ func (g *Game) AdvanceToNextRoom() {
 	g.EnemyProjectiles = []*EnemyProjectile{}
 	g.DelayedSkillEffects = []*DelayedSkillEffect{}
 	g.SkillVisualEffects = []*SkillVisualEffect{}
+	g.CombatTextEvents = []*CombatTextEvent{}
+	g.DirectionalTelegraphs = []*DirectionalTelegraphEvent{}
+	g.CombatFeedbackSequence = 0
 	g.RoomTransitionTimer = 0
 	g.PendingRoomTransition = false
 	g.BossRewardTriggered = false
@@ -845,6 +860,8 @@ func (g *Game) drawRun() {
 			item.Draw()
 		}
 	}
+
+	g.drawCombatFeedback()
 
 	if g.Player != nil {
 		systems.DrawSkillBar(g.Player, g.Settings.SkillLabels())

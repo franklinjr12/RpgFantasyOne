@@ -214,7 +214,7 @@ func (p *Player) takeDamageInternal(damage int, damageType gamedata.DamageType, 
 
 	applied := p.Entity.ApplyDamage(damage)
 	if flash {
-		p.HitFlashTimer = 0.2
+		p.HitFlashTimer = EntityHitFlashDuration
 	}
 	return applied
 }

@@ -82,6 +82,20 @@ const (
 	AutoAttackProjectileSpeed         float32 = 400
 )
 
+const (
+	CombatFeedbackTextDuration            float32 = 0.8
+	CombatFeedbackStatusDuration          float32 = 0.65
+	CombatFeedbackDirectionalDuration     float32 = 0.2
+	CombatFeedbackTextRiseSpeed           float32 = 26
+	CombatFeedbackTextBaseLift            float32 = 22
+	CombatFeedbackTextStackSpacing        float32 = 12
+	CombatFeedbackCritScale               float32 = 1.25
+	CombatFeedbackBaseScale               float32 = 1
+	CombatFeedbackBaseFontSize            int32   = 20
+	CombatFeedbackDirectionalDefaultWidth float32 = 18
+	CombatFeedbackDirectionalDefaultRange float32 = 110
+)
+
 var TerrainColorNormalRGBA = rl.NewColor(128, 128, 128, 255)
 var TerrainColorBossRGBA = rl.NewColor(64, 64, 64, 255)
 var PlayerColorRGBA = rl.NewColor(0, 0, 255, 255)

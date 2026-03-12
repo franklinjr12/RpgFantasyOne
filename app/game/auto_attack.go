@@ -23,7 +23,7 @@ func (g *Game) ApplyPlayerCombatHit(damage int, damageType gamedata.DamageType, 
 		return false
 	}
 
-	systems.ApplyCombatHit(systems.CombatHitRequest{
+	g.applyCombatHitWithFeedback(systems.CombatHitRequest{
 		Target:        g.Player,
 		BaseDamage:    damage,
 		DamageType:    damageType,
@@ -147,7 +147,7 @@ func (g *Game) resolveMeleeAutoAttack(damage int) {
 	switch t := g.PlayerAttackTarget.(type) {
 	case *gameobjects.Enemy:
 		wasAlive := t.IsAlive()
-		systems.ApplyCombatHit(systems.CombatHitRequest{
+		g.applyCombatHitWithFeedback(systems.CombatHitRequest{
 			Caster:             g.Player,
 			Target:             t,
 			BaseDamage:         damage,
@@ -162,7 +162,7 @@ func (g *Game) resolveMeleeAutoAttack(damage int) {
 		}
 	case *gameobjects.Boss:
 		wasAlive := t.IsAlive()
-		systems.ApplyCombatHit(systems.CombatHitRequest{
+		g.applyCombatHitWithFeedback(systems.CombatHitRequest{
 			Caster:             g.Player,
 			Target:             t,
 			BaseDamage:         damage,
@@ -234,7 +234,7 @@ func (g *Game) resolveCasterAutoAttack(damage int) {
 	switch t := g.PlayerAttackTarget.(type) {
 	case *gameobjects.Enemy:
 		wasAlive := t.IsAlive()
-		systems.ApplyCombatHit(systems.CombatHitRequest{
+		g.applyCombatHitWithFeedback(systems.CombatHitRequest{
 			Caster:             g.Player,
 			Target:             t,
 			BaseDamage:         damage,
@@ -250,7 +250,7 @@ func (g *Game) resolveCasterAutoAttack(damage int) {
 		}
 	case *gameobjects.Boss:
 		wasAlive := t.IsAlive()
-		systems.ApplyCombatHit(systems.CombatHitRequest{
+		g.applyCombatHitWithFeedback(systems.CombatHitRequest{
 			Caster:             g.Player,
 			Target:             t,
 			BaseDamage:         damage,

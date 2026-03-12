@@ -323,7 +323,7 @@ func (s *projectilesSystem) tryHitEnemy(g *Game, proj *Projectile, enemy *gameob
 	}
 
 	wasAlive := enemy.IsAlive()
-	s.applyProjectileHit(proj, enemy)
+	s.applyProjectileHit(g, proj, enemy)
 	markProjectileTargetHit(proj, enemy)
 	g.spawnSkillImpactVisual(proj.Skill, enemyX, enemyY)
 	g.playSkillImpactSFX(proj.Skill)
@@ -334,7 +334,7 @@ func (s *projectilesSystem) tryHitEnemy(g *Game, proj *Projectile, enemy *gameob
 		}
 		g.Player.GainXP(reward)
 		if g.Player.Class.Type == gamedata.ClassTypeRanged {
-			g.Player.Heal(g.Player.Class.KillHealAmount)
+			g.healPlayerWithFeedback(g.Player.Class.KillHealAmount)
 		}
 	}
 
@@ -358,14 +358,14 @@ func (s *projectilesSystem) tryHitBoss(g *Game, proj *Projectile, boss *gameobje
 	}
 
 	wasAlive := boss.IsAlive()
-	s.applyProjectileHit(proj, boss)
+	s.applyProjectileHit(g, proj, boss)
 	markProjectileTargetHit(proj, boss)
 	g.spawnSkillImpactVisual(proj.Skill, bossX, bossY)
 	g.playSkillImpactSFX(proj.Skill)
 	if wasAlive && !boss.IsAlive() {
 		g.Player.GainXP(100)
 		if g.Player.Class.Type == gamedata.ClassTypeRanged {
-			g.Player.Heal(g.Player.Class.KillHealAmount * 5)
+			g.healPlayerWithFeedback(g.Player.Class.KillHealAmount * 5)
 		}
 	}
 
@@ -377,13 +377,16 @@ func (s *projectilesSystem) tryHitBoss(g *Game, proj *Projectile, boss *gameobje
 	return true
 }
 
-func (s *projectilesSystem) applyProjectileHit(proj *Projectile, target interface{}) {
+func (s *projectilesSystem) applyProjectileHit(g *Game, proj *Projectile, target interface{}) {
+	if g == nil || proj == nil || target == nil {
+		return
+	}
 	if proj.Skill != nil && proj.Caster != nil {
-		systems.ApplySkill(proj.Caster, proj.Skill, []interface{}{target})
+		g.applySkillWithFeedback(proj.Caster, proj.Skill, []interface{}{target})
 		return
 	}
 
-	systems.ApplyCombatHit(systems.CombatHitRequest{
+	g.applyCombatHitWithFeedback(systems.CombatHitRequest{
 		Caster:             proj.Caster,
 		Target:             target,
 		BaseDamage:         proj.Damage,
@@ -451,7 +454,7 @@ func (s *projectilesSystem) applyDelayedSkill(g *Game, delayed *DelayedSkillEffe
 		return 0
 	}
 	targets := s.resolveDelayedTargets(g, delayed)
-	systems.ApplySkill(delayed.Caster, delayed.Skill, targets)
+	g.applySkillWithFeedback(delayed.Caster, delayed.Skill, targets)
 	g.applySkillPostCast(delayed.Skill, len(targets))
 	delayed.LastAppliedX = delayed.X
 	delayed.LastAppliedY = delayed.Y
@@ -809,6 +812,7 @@ func (s *effectsSystem) Update(ctx *RuntimeContext, dt float32) {
 	}
 
 	g.updateSkillVisualEffects(dt)
+	g.updateCombatFeedback(dt)
 	if ctx.IsMenuOpen || g.Player == nil {
 		return
 	}

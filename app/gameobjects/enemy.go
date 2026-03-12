@@ -180,7 +180,7 @@ func (e *Enemy) Attack(playerX, playerY float32) (bool, EnemyAttackPayload) {
 	if e.CurrentCooldown > 0 || e.State != EnemyStateAttacking || !e.WantsAttack {
 		return false, zero
 	}
-	e.AttackFlashTimer = 0.15
+	e.AttackFlashTimer = EnemyAttackFlashDuration
 	e.CurrentCooldown = e.AttackCooldown
 	sourceX, sourceY := e.Center()
 	onHit := make([]gamedata.EffectSpec, len(e.OnHitEffects))
@@ -202,7 +202,7 @@ func (e *Enemy) Attack(playerX, playerY float32) (bool, EnemyAttackPayload) {
 
 func (e *Enemy) TakeDamage(damage int) {
 	e.Entity.ApplyDamage(damage)
-	e.HitFlashTimer = 0.2
+	e.HitFlashTimer = EntityHitFlashDuration
 }
 
 func (e *Enemy) DisplayName() string {

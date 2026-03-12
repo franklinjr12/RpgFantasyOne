@@ -49,7 +49,7 @@ func (g *Game) executeSkillDelivery(skill *gamedata.Skill, intent systems.CastIn
 func (g *Game) resolveAndApplySkill(skill *gamedata.Skill, intent systems.CastIntent) int {
 	g.applySkillPreCast(skill, intent)
 	targets := systems.ResolveTargets(g.Player, intent, skill.Targeting, g.Enemies, g.Boss)
-	systems.ApplySkill(g.Player, skill, targets)
+	g.applySkillWithFeedback(g.Player, skill, targets)
 	g.applySkillPostCast(skill, len(targets))
 	if len(targets) > 0 {
 		impactX, impactY := resolveImpactCenter(intent, targets[0])

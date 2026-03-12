@@ -165,32 +165,32 @@
 - [x] Skill effects
 
 ### In-Run HUD
-- [ ] Player HP bar + resource (mana/energy) bar
-- [ ] Skill bar (4 slots):
-  - [ ] Icons
-  - [ ] Cooldown overlays
-  - [ ] Cost indicators
-  - [ ] Keybind labels
-- [ ] XP/level display + “stat points available” indicator
-- [ ] Minimap (simple: room nodes + current room + boss room)
-- [ ] Buff/Debuff tray (icons + remaining duration)
-- [ ] Target frame when hovering/locked:
-  - [ ] Enemy HP bar
-  - [ ] Name/type + elite indicator
-  - [ ] Active debuffs icons
+- [x] Player HP bar + resource (mana/energy) bar
+- [x] Skill bar (4 slots):
+  - [x] Icons
+  - [x] Cooldown overlays
+  - [x] Cost indicators
+  - [x] Keybind labels
+- [x] XP/level display + “stat points available” indicator
+- [x] Minimap (simple: room nodes + current room + boss room)
+- [x] Buff/Debuff tray (icons + remaining duration)
+- [x] Target frame when hovering/locked:
+  - [x] Enemy HP bar
+  - [x] Name/type + elite indicator
+  - [x] Active debuffs icons
 
 ### Combat Feedback
 - [ ] Floating damage numbers (crit styling)
 - [ ] Floating heal numbers
 - [ ] Status text popups (e.g., “Stunned”, “Silenced”)
 - [ ] Telegraph indicators (AoE circles, line attacks)
-- [ ] Hit flashes + small screenshake toggle in settings
+- [ ] Hit flashes
 
 ### Reward UI
-- [ ] Reward selection screen (3 cards):
-  - [ ] Item icon, stats, special effect text
-  - [ ] Compare with current gear
-- [ ] “Build recap” panel (key stats, active effects, chosen rewards)
+- [x] Reward selection screen (3 cards):
+  - [x] Item icon, stats, special effect text
+  - [x] Compare with current gear
+- [x] “Build recap” panel (key stats, active effects, chosen rewards)
 
 ---
 

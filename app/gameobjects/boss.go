@@ -270,7 +270,7 @@ func (b *Boss) updateHeavyAttack(deltaTime float32, playerX, playerY float32) {
 		Duration: duration,
 		TimeLeft: duration,
 	}
-	b.AttackFlashTimer = 0.22
+	b.AttackFlashTimer = BossHeavyAttackFlashDuration
 }
 
 func (b *Boss) updateAreaDenial(deltaTime float32, playerX, playerY float32) {

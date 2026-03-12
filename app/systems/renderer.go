@@ -69,6 +69,16 @@ const (
 	doorHeightTiles        = 2.0
 )
 
+const (
+	delayedTelegraphFillAlpha         uint8   = 40
+	delayedTelegraphOutlineAlpha      uint8   = 220
+	activeZoneFillAlpha               uint8   = 70
+	activeZoneOutlineAlpha            uint8   = 255
+	directionalTelegraphBaseAlpha     uint8   = 80
+	directionalTelegraphPeakAlpha     uint8   = 220
+	directionalTelegraphEndpointScale float32 = 0.7
+)
+
 var floorTileVariants = [][2]int{
 	{0, 0},
 	{0, 1},
@@ -440,8 +450,8 @@ func DrawSkillProjectile(x, y, radius float32, skill *gamedata.Skill, camera *Ca
 func DrawDelayedTelegraph(x, y, radius float32, skill *gamedata.Skill, camera *Camera) {
 	screenX, screenY := WorldToScreenIso(x, y, camera)
 	visualColor, _ := skillVisualStyle(skill)
-	telegraphFill := rl.NewColor(visualColor.R, visualColor.G, visualColor.B, 40)
-	telegraphOutline := rl.NewColor(visualColor.R, visualColor.G, visualColor.B, 220)
+	telegraphFill := rl.NewColor(visualColor.R, visualColor.G, visualColor.B, delayedTelegraphFillAlpha)
+	telegraphOutline := rl.NewColor(visualColor.R, visualColor.G, visualColor.B, delayedTelegraphOutlineAlpha)
 	rl.DrawCircle(int32(screenX), int32(screenY), radius, telegraphFill)
 	rl.DrawCircleLines(int32(screenX), int32(screenY), radius, telegraphOutline)
 }
@@ -449,10 +459,33 @@ func DrawDelayedTelegraph(x, y, radius float32, skill *gamedata.Skill, camera *C
 func DrawActiveSkillZone(x, y, radius float32, skill *gamedata.Skill, camera *Camera) {
 	screenX, screenY := WorldToScreenIso(x, y, camera)
 	visualColor, _ := skillVisualStyle(skill)
-	zoneFill := rl.NewColor(visualColor.R, visualColor.G, visualColor.B, 70)
-	zoneOutline := rl.NewColor(visualColor.R, visualColor.G, visualColor.B, 255)
+	zoneFill := rl.NewColor(visualColor.R, visualColor.G, visualColor.B, activeZoneFillAlpha)
+	zoneOutline := rl.NewColor(visualColor.R, visualColor.G, visualColor.B, activeZoneOutlineAlpha)
 	rl.DrawCircle(int32(screenX), int32(screenY), radius, zoneFill)
 	rl.DrawCircleLines(int32(screenX), int32(screenY), radius, zoneOutline)
+}
+
+func DrawDirectionalTelegraph(startX, startY, endX, endY, width, remainingRatio float32, skill *gamedata.Skill, camera *Camera) {
+	if width <= 0 {
+		width = 8
+	}
+	if remainingRatio < 0 {
+		remainingRatio = 0
+	}
+	if remainingRatio > 1 {
+		remainingRatio = 1
+	}
+
+	startScreenX, startScreenY := WorldToScreenIso(startX, startY, camera)
+	endScreenX, endScreenY := WorldToScreenIso(endX, endY, camera)
+	visualColor, _ := skillVisualStyle(skill)
+	alpha := uint8(float32(directionalTelegraphBaseAlpha) + (float32(directionalTelegraphPeakAlpha-directionalTelegraphBaseAlpha) * remainingRatio))
+	lineColor := rl.NewColor(visualColor.R, visualColor.G, visualColor.B, alpha)
+	endpointColor := rl.NewColor(visualColor.R, visualColor.G, visualColor.B, uint8(float32(alpha)*0.85))
+	start := rl.NewVector2(startScreenX, startScreenY)
+	end := rl.NewVector2(endScreenX, endScreenY)
+	rl.DrawLineEx(start, end, width, lineColor)
+	rl.DrawCircle(int32(endScreenX), int32(endScreenY), width*directionalTelegraphEndpointScale, endpointColor)
 }
 
 func DrawSkillCastPulse(x, y, radius, remainingRatio float32, skill *gamedata.Skill, filled bool, camera *Camera) {

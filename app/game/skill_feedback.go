@@ -10,6 +10,9 @@ func (g *Game) spawnSkillCastVisual(skill *gamedata.Skill, intent systems.CastIn
 	if g == nil || g.Player == nil || skill == nil {
 		return
 	}
+	if skill.Targeting.Type == gamedata.TargetDirection {
+		g.spawnDirectionalTelegraph(skill, intent)
+	}
 
 	px, py := g.Player.Center()
 	x := px

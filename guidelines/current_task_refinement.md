@@ -1,100 +1,100 @@
-# Step 11 Refinement - Deterministic Rewards and Items (Curated Progression)
+# Current Task Refinement - Backlog Item 12 Combat Feedback
 
-## Goal
-- Implement backlog step 11 from `guidelines/backlog.md` with deterministic, curated rewards and item progression.
-- Keep architecture aligned with project principles: entities store state, systems apply logic, and item behavior stays data-driven.
+## Refined Scope
+- Source backlog slice: `12) UI/UX (Must Be Playable and Clear) -> Combat Feedback`
+- Required outcomes:
+- [x] Floating damage numbers (crit styling)
+- [x] Floating heal numbers
+- [x] Status text popups (for example: `Stunned`, `Silenced`)
+- [x] Telegraph indicators (AoE circles and line attacks)
+- [x] Hit flashes
 
-## Scope Boundaries
-- In scope: equipment/reward data model, curated Biome 1 item pool, deterministic weighted selection with anti-repeat, boss and milestone reward flow, compare UI in reward screen, and focused tests.
-- Out of scope: large UI redesign outside reward screen, new class skills, major dungeon generation changes, or full persistence systems.
+## Current Code Reality (Grounding)
+- Existing and already usable:
+- [x] Entity hit flashes are rendered (`DrawPlayer`, `DrawEnemy`, `DrawBoss`) via `HitFlashTimer`.
+- [x] AoE telegraphs exist for delayed skills and boss mechanics (`DrawDelayedTelegraph`, boss zone/heavy telegraph rendering).
+- [x] Skill cast/impact pulse visuals exist (`SkillVisualEffects`, `DrawSkillCastPulse`).
+- Missing or incomplete for backlog completion:
+- [x] No floating combat text system for damage/heal/status.
+- [x] No crit-specific floating text styling.
+- [x] No line telegraph visualization for directional attacks.
+- [x] Combat feedback spawning is not centralized; damage application happens across multiple paths.
 
-## Current State Snapshot (from code)
-- `ItemSlot` already has 4 slots (`Weapon`, `Head`, `Chest`, `Lower`) in `app/gamedata/items.go`.
-- `Item` currently supports only `StatBonuses` + `ClassRestriction`; no special item proc/passive model exists.
-- Reward generation uses randomness from `GenerateRewardOptions` and is not a weighted deterministic selector with run history.
-- Reward confirm currently always calls `EnterResults(true, rewardPicked)` in `updateReward`, so there is no mid-run reward-return flow.
-- Reward UI shows name/description/stat bonuses but no equipped-vs-offered delta compare.
-- Current item definitions are below the target of 30 curated items.
+## Constraints (Do Not Drift)
+- [x] Preserve current gameplay outcomes (damage, cooldowns, room flow, XP/reward behavior).
+- [x] Keep runtime order intact (`Input -> AI -> Casting -> Projectiles -> Movement -> Combat Resolve -> Effects -> Dungeon/Run -> UI/Render Prep`).
+- [x] Keep Windows/raylib assumptions.
+- [x] Prefer `gamedata` effect/damage types; do not introduce duplicate domain structs in `systems`.
 
-## Assumptions for This Refinement
-- Boss reward offers remain `choose 1 of 3`.
-- Mid-run milestone reward is implemented as a smaller `choose 1 of 2` at room 4 (1-based index), once per run.
-- Anti-repeat means avoiding identical offer sets across reward presentations in the same run when alternatives exist.
-- Determinism target is run-deterministic with explicit seed/history inputs, not global random behavior.
+## Task Backlog
 
-## Implementation Backlog
-- [x] 1) Refactor item data model for curated progression in `app/gamedata`.
-  Add stable item identity and reward metadata to `Item` (example: `ID`, `Weight`, optional tier/source tags, optional biome tag).
-  Add data-driven special effect model on items (example: typed proc/passive definitions) without name-based branching.
-  Keep existing stat bonus behavior compatible with current `ComputeEffectiveStats`.
+### 1) Create Combat Feedback Runtime Model
+- [x] Add a dedicated combat feedback model in `app/game` for transient UI events (damage text, heal text, status text, directional telegraph visuals).
+- [x] Add `Game` state fields for active feedback events and clear them in all run/reset transitions (`NewGame`, `ResetState`, `StartRun`, `AdvanceToNextRoom`, debug room load).
+- [x] Add update lifecycle for feedback events in fixed update path (timer decay, upward drift, fade-out, cleanup).
+- [x] Add draw lifecycle in `drawRun` after world entities and before HUD so text is readable but not hidden by terrain.
+- [x] Add combat feedback tuning constants in `app/game/config.go` (durations, rise speed, alpha fade, crit scale, status text duration).
 
-- [x] 2) Build a curated Biome 1 item pool with at least 30 items.
-  Create/organize item tables under `app/gamedata` so total unique items for Biome 1 is `>= 30`.
-  Ensure class flavor coverage target is met (`>= 10` flavor items per class, overlap allowed).
-  Ensure mix includes minor stat upgrades and build-enabler effects (for example burn-on-hit or bonus crit vs slowed targets).
+### 2) Centralize Damage/Heal Feedback Emission
+- [x] Add `game`-layer wrappers around hit application so combat outcomes and UI feedback are emitted together.
+- [x] Route all player->enemy/boss hit paths through wrappers:
+- [x] auto-attacks in `app/game/auto_attack.go`
+- [x] skill instant/projectile/delayed application paths (`skills_handler.go`, `runtime_pipeline.go`)
+- [x] Route enemy/boss->player hit paths through wrapper (`ApplyPlayerCombatHit` already central; extend it for feedback emission).
+- [x] Use applied HP delta (before/after) to spawn damage/heal text accurately after mitigation and shields.
+- [x] Use resolver crit result to style crit damage text (size/color/prefix like `CRIT` or `!`).
 
-- [x] 3) Replace ad-hoc reward generation with deterministic weighted selection.
-  Introduce a pure selector API in `app/gamedata` (or equivalent core data layer) that accepts explicit inputs:
-  class type, biome, reward context, offer size, seed, and previous offer history.
-  Implement weighted sampling without duplicates inside one offer.
-  Implement anti-repeat for offer sets with bounded rerolls/fallback logic when pool size is small.
-  Remove direct `math/rand` global usage from reward generation path.
+### 3) Implement Floating Damage Numbers (Crit Styling)
+- [x] Spawn floating damage text on every successful combat hit with `AppliedDamage > 0`.
+- [x] Differentiate friendly/enemy damage colors for readability (player taking damage vs enemies taking damage).
+- [x] Apply crit styling when `DamageResult.IsCrit == true` (larger scale, stronger color, optional bounce).
+- [x] Prevent overlap clutter: apply small deterministic per-event horizontal jitter and stack offset.
+- [x] Add deterministic tests for event spawn count/value/style flags from representative hit paths.
 
-- [x] 4) Update game reward state to support multiple reward contexts.
-  Extend `Game` reward state in `app/game/game.go` to track reward context (boss vs milestone), run reward history, and per-run milestone trigger flag.
-  Keep boss reward one-time gating behavior intact.
-  Reset all reward-related run state correctly in `ResetState` and run start paths.
+### 4) Implement Floating Heal Numbers
+- [x] Spawn heal text on player healing from:
+- [x] class/item lifesteal during combat hit resolution
+- [x] ranged kill-heal bonuses in projectile kill branches
+- [x] Keep displayed value clamped to effective heal gained (not attempted heal amount).
+- [x] Style heal text distinctly (green palette and `+` prefix).
+- [x] Add tests covering lifesteal and kill-heal popup emission.
 
-- [x] 5) Implement milestone reward flow in run progression.
-  Trigger optional milestone reward once at room 4 clear (1-based), before continuing normal room progression.
-  On milestone reward confirm, equip selected item and return to `StateRun` (not results).
-  On boss reward confirm, keep current expected behavior of ending run into `StateResults`.
+### 5) Implement Status Text Popups
+- [x] Add effect-to-label mapper in `gamedata` or `game` (for example: `EffectStun -> STUNNED`, `EffectSilence -> SILENCED`, `EffectFreeze -> FROZEN`).
+- [x] On successful application of control/debuff effects, spawn short-lived status popups at target position.
+- [x] Deduplicate repeated status labels per hit event (do not emit duplicate identical labels from one application batch).
+- [x] Ensure both enemy targets and player target can receive status popups.
+- [x] Add tests for at least stun/silence/slow popup emission and dedupe behavior.
 
-- [x] 6) Integrate item special effects into combat resolution.
-  Hook item passive/proc application into centralized combat paths (`app/systems/combat_resolver.go` and/or `app/systems/damage_resolver.go`) using item effect types, not item names.
-  Ensure effects that depend on target state (example: bonus crit vs slowed target) are resolved in a deterministic, testable way.
-  Preserve existing skill/effect and damage pipelines.
+### 6) Complete Telegraph Indicators (AoE + Line)
+- [x] Keep current AoE telegraph rendering intact and move shared styling knobs to config constants.
+- [x] Add directional/line telegraph visual support for directional attacks (minimum: player directional skills such as `Shockwave Slam`).
+- [x] Represent line telegraph using world-space start/end derived from cast intent and targeting range.
+- [x] Add renderer helper(s) in `app/systems/renderer.go` for line telegraph draw and optional endpoint marker.
+- [x] Spawn directional telegraph events with short lifetime in cast feedback path (`skill_feedback.go`).
 
-- [x] 7) Implement compare UI in reward presentation.
-  Update reward screen drawing (`app/game/game.go` and shared UI helpers if needed) to show:
-  offered item slot/effects and equipped item in same slot.
-  Show stat deltas for equip swap in a stable stat order with positive/negative readability.
-  Keep existing keyboard controls (`1/2/3` + `Enter`) and selection highlight behavior.
+### 7) Hit Flash Completion and Validation
+- [x] Audit all damage sources and confirm hit flash timer is triggered for player/enemy/boss across direct hits, projectiles, skill hits, and DoT ticks where intended.
+- [x] Normalize flash durations/colors through constants to avoid hardcoded duplicates (`0.2`, etc.).
+- [x] Add/adjust tests to validate flash timer activation for representative damage paths.
 
-- [x] 8) Add and update focused automated tests.
-  `app/gamedata` tests:
-  validate curated pool counts, deterministic selection for same inputs, weighted selection constraints, unique-offer constraint, and anti-repeat behavior.
-  `app/game` tests:
-  validate reward context transitions (milestone returns to run, boss goes to results), one-time milestone trigger, and reset behavior.
-  `app/systems` or relevant package tests:
-  validate item special effects are applied correctly through combat resolver paths.
+### 8) QA, Testing, and Backlog Closeout
+- [x] Add targeted tests in `app/game` (raylib-tagged) for combat feedback event emission logic.
+- [x] Add targeted tests in `app/systems` only if resolver contracts are extended (resolver contracts unchanged; no additional `app/systems` tests required).
+- [ ] Validate package tests with:
+- [ ] `go test ./app/game -tags raylib`
+- [ ] `go test ./app/systems -tags raylib`
+- [x] `go test ./app/gamedata ./app/gameobjects ./app/world`
+- Note: `go test` runs for raylib-tagged packages are currently blocked in this environment because `raylib.dll` is not available at runtime.
+- [ ] Perform manual smoke checklist in one run per class:
+- [ ] Crit and non-crit damage numbers are visually distinct.
+- [ ] Heal numbers appear for lifesteal/kill-heal.
+- [ ] Stun/silence/slow popups are readable and short-lived.
+- [ ] AoE and directional line telegraphs are clear and non-blocking.
+- [ ] Hit flashes remain readable without overwhelming sprites.
 
-- [x] 9) Keep data access API coherent after refactor.
-  Update `app/gamedata/data_access.go` reward accessors so they expose pool and selector data cleanly (instead of returning already-randomized options).
-  Update call sites in `app/game/game.go` accordingly.
-
-- [x] 10) Final validation and checklist pass.
-  Confirm no skill-name or item-name branching was introduced in core execution paths.
-  Confirm step 11 backlog expectations are satisfied end-to-end in code and UI behavior.
-  Mark completed boxes in this file as implementation progresses.
-
-## Acceptance Criteria (Step 11 Done Definition)
-- [x] Equipment flow supports all 4 slots (`Weapon`, `Head`, `Chest`, `Lower`) through reward equip flow.
-- [x] Item model supports both stat modifiers and occasional typed special effects.
-- [x] Biome 1 curated reward pool has at least 30 items with class flavor coverage and build-enabler presence.
-- [x] Boss reward presents 3 deterministic weighted options, anti-repeat protected, choose 1.
-- [x] Mid-run milestone reward (room 4) presents a smaller deterministic offer and returns to run after selection.
-- [x] Reward UI includes equipped-vs-offered compare deltas.
-- [x] New/updated tests cover deterministic selection, anti-repeat, reward flow transitions, and special effect application.
-
-## Suggested Verification Commands
-- `go test ./app/gamedata`
-- `go test ./app/gameobjects`
-- `go test ./app/world`
-- `go test ./app/game -tags raylib` (if raylib runtime is available locally)
-- `go test ./app/systems -tags raylib` (if raylib runtime is available locally)
-
-## Notes for Implementing Agent
-- Keep changes incremental and avoid broad rewrites.
-- Prefer adding pure, testable selection/helpers in `app/gamedata` and thin orchestration in `app/game`.
-- Preserve existing gameplay behavior outside reward/item scope.
+## Definition of Done
+- [ ] All five combat feedback backlog bullets are implemented and visibly verifiable in-run.
+- [ ] No gameplay regressions in core loop/state transitions.
+- [ ] New tests pass in supported raylib-tagged workflow.
+- [ ] `guidelines/backlog.md` item `12 -> Combat Feedback` can be checked off.
