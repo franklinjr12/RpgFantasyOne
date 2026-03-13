@@ -495,8 +495,13 @@ func (g *Game) SpawnRoomEnemies() {
 	g.Boss = nil
 
 	if g.CurrentRoom.IsBoss() {
-		bossX, bossY := g.CurrentRoom.SpawnPoint()
-		g.Boss = gameobjects.NewBoss(bossX, bossY, g.CurrentRoom.Biome)
+		roomCenterX := g.CurrentRoom.X + g.CurrentRoom.Width/2
+		roomCenterY := g.CurrentRoom.Y + g.CurrentRoom.Height/2
+		g.Boss = gameobjects.NewBoss(0, 0, g.CurrentRoom.Biome)
+		if g.Boss != nil {
+			g.Boss.PosX = roomCenterX - g.Boss.Hitbox.Width/2
+			g.Boss.PosY = roomCenterY - g.Boss.Hitbox.Height/2
+		}
 	} else {
 		for _, enemyRef := range g.CurrentRoom.Enemies {
 			enemy := gameobjects.NewEnemyFromArchetype(enemyRef.X, enemyRef.Y, enemyRef.Type, enemyRef.IsElite, enemyRef.EliteModifier)
@@ -572,7 +577,6 @@ func (g *Game) AdvanceToNextRoom() {
 	startY := entryY - g.Player.Hitbox.Height/2
 	g.Player.PosX = startX
 	g.Player.PosY = startY
-	g.Player.HP = g.Player.MaxHP
 	g.Player.Alive = true
 
 	g.SpawnRoomEnemies()

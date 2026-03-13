@@ -61,7 +61,7 @@ var classTable = map[ClassType]Class{
 		PrimaryStat:      StatTypeINT,
 		BaselineStats:    Stats{STR: 2, AGI: 4, VIT: 6, INT: 9, DEX: 6, LUK: 4},
 		GrowthBias:       StatTypeINT,
-		AttackRange:      150,
+		AttackRange:      50,
 		ManaCost:         10,
 		ManaRegenPerSec:  6.0,
 		ManaToHealthRate: 2.0,

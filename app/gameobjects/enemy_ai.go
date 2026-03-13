@@ -19,7 +19,7 @@ func ResolveEnemyIntent(enemy *Enemy, playerX, playerY float32) {
 	dx := playerX - enemyX
 	dy := playerY - enemyY
 	distance := float32(math.Sqrt(float64(dx*dx + dy*dy)))
-	if distance > enemy.AggroRange {
+	if distance > enemy.AggroRange && !enemy.Provoked {
 		enemy.State = EnemyStateIdle
 		return
 	}

@@ -59,6 +59,7 @@ type Enemy struct {
 	IntentMoveX        float32
 	IntentMoveY        float32
 	WantsAttack        bool
+	Provoked           bool
 }
 
 func NewEnemy(x, y float32, isElite bool) *Enemy {
@@ -133,6 +134,7 @@ func NewEnemyFromArchetype(x, y float32, archetypeType gamedata.EnemyArchetypeTy
 		IntentMoveX:        0,
 		IntentMoveY:        0,
 		WantsAttack:        false,
+		Provoked:           false,
 	}
 }
 
@@ -201,7 +203,10 @@ func (e *Enemy) Attack(playerX, playerY float32) (bool, EnemyAttackPayload) {
 }
 
 func (e *Enemy) TakeDamage(damage int) {
-	e.Entity.ApplyDamage(damage)
+	applied := e.Entity.ApplyDamage(damage)
+	if applied > 0 {
+		e.Provoked = true
+	}
 	e.HitFlashTimer = EntityHitFlashDuration
 }
 

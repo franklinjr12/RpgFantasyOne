@@ -65,3 +65,21 @@ func TestDataAccessClassSkillEnemy(t *testing.T) {
 		t.Fatalf("expected deterministic reward selector to return 3 options, got %d", len(rewardOptions))
 	}
 }
+
+func TestCasterBasicAttackRangeMatchesMeleeBaseline(t *testing.T) {
+	melee := GetClassData(ClassTypeMelee)
+	caster := GetClassData(ClassTypeCaster)
+	if melee == nil || caster == nil {
+		t.Fatalf("expected melee and caster class data")
+	}
+
+	if melee.AttackRange != 50 {
+		t.Fatalf("expected melee baseline attack range 50, got %.0f", melee.AttackRange)
+	}
+	if caster.AttackRange != 50 {
+		t.Fatalf("expected caster basic attack range 50, got %.0f", caster.AttackRange)
+	}
+	if caster.AttackRange != melee.AttackRange {
+		t.Fatalf("expected caster attack range %.0f to match melee baseline %.0f", caster.AttackRange, melee.AttackRange)
+	}
+}

@@ -127,3 +127,26 @@ func TestBossEnrageIncreasesAreaZoneCount(t *testing.T) {
 		t.Fatalf("expected %d zones while enraged, got %d", expected, boss.ActiveZoneCount())
 	}
 }
+
+func TestBossProvokedOutsideAggroRangeStillChases(t *testing.T) {
+	boss := NewBoss(0, 0, "forest")
+	boss.AggroRange = 20
+
+	playerX := float32(500)
+	playerY := float32(0)
+
+	boss.Update(0.016, playerX, playerY)
+	if boss.State != EnemyStateIdle {
+		t.Fatalf("expected idle while outside aggro and not provoked, got %d", boss.State)
+	}
+
+	boss.TakeDamage(1)
+	if !boss.Provoked {
+		t.Fatalf("expected boss to be provoked after taking damage")
+	}
+
+	boss.Update(0.016, playerX, playerY)
+	if boss.State != EnemyStateChasing {
+		t.Fatalf("expected provoked boss to chase outside aggro range, got %d", boss.State)
+	}
+}

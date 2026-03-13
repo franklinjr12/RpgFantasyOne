@@ -625,6 +625,7 @@ func (s *movementSystem) Update(ctx *RuntimeContext, dt float32) {
 	g.Player.PosY = newY
 
 	s.updateEnemies(g, dt)
+	s.updateBoss(g, dt)
 }
 
 func (s *movementSystem) updatePlayerFacing(g *Game, horizontalVelocity float32) {
@@ -703,6 +704,59 @@ func (s *movementSystem) updateEnemies(g *Game, dt float32) {
 		enemy.PosX = nextX
 		enemy.PosY = nextY
 	}
+}
+
+func (s *movementSystem) updateBoss(g *Game, dt float32) {
+	if g == nil || g.Boss == nil || !g.Boss.IsAlive() {
+		return
+	}
+	if !gamedata.CanAct(&g.Boss.Effects) {
+		return
+	}
+
+	speed := g.Boss.MoveSpeed * gamedata.MoveSpeedMultiplier(&g.Boss.Effects)
+	if speed <= 0 {
+		return
+	}
+
+	moveDeltaX := g.Boss.IntentMoveX * speed * dt
+	moveDeltaY := g.Boss.IntentMoveY * speed * dt
+	if moveDeltaX == 0 && moveDeltaY == 0 {
+		return
+	}
+
+	nextX := g.Boss.PosX + moveDeltaX
+	nextY := g.Boss.PosY + moveDeltaY
+	if g.CurrentRoom != nil {
+		minX := g.CurrentRoom.X
+		minY := g.CurrentRoom.Y
+		maxX := g.CurrentRoom.X + g.CurrentRoom.Width - g.Boss.Hitbox.Width
+		maxY := g.CurrentRoom.Y + g.CurrentRoom.Height - g.Boss.Hitbox.Height
+		if nextX < minX {
+			nextX = minX
+		}
+		if nextX > maxX {
+			nextX = maxX
+		}
+		if nextY < minY {
+			nextY = minY
+		}
+		if nextY > maxY {
+			nextY = maxY
+		}
+
+		current := world.AABB{X: g.Boss.PosX, Y: g.Boss.PosY, Width: g.Boss.Hitbox.Width, Height: g.Boss.Hitbox.Height}
+		candidate := world.AABB{X: nextX, Y: nextY, Width: g.Boss.Hitbox.Width, Height: g.Boss.Hitbox.Height}
+		// If the boss is already intersecting an obstacle, allow movement so it can
+		// escape instead of being permanently pinned.
+		if overlapsRoomObstacle(candidate, g.CurrentRoom.Obstacles) && !overlapsRoomObstacle(current, g.CurrentRoom.Obstacles) {
+			nextX = g.Boss.PosX
+			nextY = g.Boss.PosY
+		}
+	}
+
+	g.Boss.PosX = nextX
+	g.Boss.PosY = nextY
 }
 
 func overlapsRoomObstacle(candidate world.AABB, obstacles []world.AABB) bool {
